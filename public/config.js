@@ -1,0 +1,1 @@
+window.ARCADE_MULTIPLAYER_SERVER = "";

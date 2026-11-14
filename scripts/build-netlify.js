@@ -14,16 +14,22 @@ if (serverUrl) {
 }
 
 fs.mkdirSync(output, { recursive: true });
+if (!fs.existsSync(path.join(output, "index.html"))) {
+  throw new Error("Vite no generó dist/index.html.");
+}
 const gamesOutput = path.join(output, "GAMES");
 fs.mkdirSync(gamesOutput, { recursive: true });
-for (const file of ["index.html"]) {
-  fs.copyFileSync(path.join(root, file), path.join(output, file));
-}
-for (const file of ["bubbletrouble.swf", "zombie-trailer-park.swf"]) {
-  fs.copyFileSync(path.join(root, "GAMES", file), path.join(gamesOutput, file));
-}
-for (const file of ["bubbletrouble.swf", "zombie-trailer-park.swf"]) {
-  fs.rmSync(path.join(output, file), { force: true });
+const gameFiles = [
+  "Bad_Ice_Cream.swf",
+  "Bad_Ice_Cream_2.swf",
+  "Bad_Ice_Cream_3.swf",
+  "bubbletrouble.swf",
+  "zombie-trailer-park.swf"
+];
+for (const file of gameFiles) {
+  const source = path.join(root, "GAMES", file);
+  if (!fs.existsSync(source)) throw new Error(`No se encontró el juego ${source}.`);
+  fs.copyFileSync(source, path.join(gamesOutput, file));
 }
 
 const catalogPath = path.join(root, "catalogo.json");

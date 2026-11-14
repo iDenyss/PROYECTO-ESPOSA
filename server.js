@@ -14,13 +14,23 @@ const allowedOrigins = new Set(
     .filter(Boolean)
 );
 const allowedKeys = {
-  1: new Set([32, 37, 39]),
-  2: new Set([67, 87, 88])
+  bubble: {
+    1: new Set([32, 37, 39]),
+    2: new Set([67, 87, 88])
+  },
+  icecream: {
+    1: new Set([32, 37, 38, 39, 40]),
+    2: new Set([65, 68, 70, 83, 87])
+  }
 };
+const gameIds = new Set(["bubble-trouble", "bad-ice-cream-1", "bad-ice-cream-2", "bad-ice-cream-3"]);
 const staticFiles = new Map([
   ["/", ["index.html", "text/html; charset=utf-8"]],
   ["/index.html", ["index.html", "text/html; charset=utf-8"]],
   ["/config.js", ["config.js", "text/javascript; charset=utf-8"]],
+  ["/GAMES/Bad_Ice_Cream.swf", ["GAMES/Bad_Ice_Cream.swf", "application/x-shockwave-flash"]],
+  ["/GAMES/Bad_Ice_Cream_2.swf", ["GAMES/Bad_Ice_Cream_2.swf", "application/x-shockwave-flash"]],
+  ["/GAMES/Bad_Ice_Cream_3.swf", ["GAMES/Bad_Ice_Cream_3.swf", "application/x-shockwave-flash"]],
   ["/GAMES/bubbletrouble.swf", ["GAMES/bubbletrouble.swf", "application/x-shockwave-flash"]],
   ["/GAMES/zombie-trailer-park.swf", ["GAMES/zombie-trailer-park.swf", "application/x-shockwave-flash"]]
 ]);
@@ -124,13 +134,16 @@ function handleHttp(req, res) {
   }
   if (req.method === "POST" && url.pathname === "/api/rooms") {
     if (rooms.size >= 1000) return reply(req, res, 503, { error: "El servidor está lleno. Intenta más tarde." });
-    const code = newRoomCode();
-    const token = newToken();
-    rooms.set(code, {
-      code, createdAt: Date.now(), lastActive: Date.now(), started: false,
-      players: { 1: { token, socket: null }, 2: null }
-    });
-    return reply(req, res, 201, { code, token, seat: 1 });
+    return readJson(req).then(({ gameId = "bubble-trouble" }) => {
+      if (!gameIds.has(gameId)) return reply(req, res, 400, { error: "El juego seleccionado no está disponible para multijugador." });
+      const code = newRoomCode();
+      const token = newToken();
+      rooms.set(code, {
+        code, gameId, createdAt: Date.now(), lastActive: Date.now(), started: false,
+        players: { 1: { token, socket: null }, 2: null }
+      });
+      reply(req, res, 201, { code, token, seat: 1, gameId });
+    }).catch((error) => reply(req, res, 400, { error: error.message }));
   }
   if (req.method === "POST" && url.pathname === "/api/rooms/join") {
     return readJson(req).then(({ code }) => {
@@ -141,7 +154,7 @@ function handleHttp(req, res) {
       const token = newToken();
       room.players[2] = { token, socket: null };
       room.lastActive = Date.now();
-      reply(req, res, 200, { code: normalized, token, seat: 2 });
+      reply(req, res, 200, { code: normalized, token, seat: 2, gameId: room.gameId });
     }).catch((error) => reply(req, res, 400, { error: error.message }));
   }
 
@@ -218,7 +231,8 @@ webSockets.on("connection", (client, room, seat) => {
     try { message = JSON.parse(data.toString()); }
     catch { client.close(1008, "Invalid message"); return; }
     if (message.type === "input") {
-      if (!room.started || !allowedKeys[seat].has(message.keyCode) || typeof message.down !== "boolean") {
+      const game = room.gameId === "bubble-trouble" ? allowedKeys.bubble : allowedKeys.icecream;
+      if (!room.started || !game[seat].has(message.keyCode) || typeof message.down !== "boolean") {
         client.close(1008, "Invalid input");
         return;
       }
@@ -248,7 +262,7 @@ webSockets.on("connection", (client, room, seat) => {
       if (ready) {
         room.started = true;
         room.lastActive = now;
-        for (const number of [1, 2]) send(room.players[number].socket, { type: "start" });
+        for (const number of [1, 2]) send(room.players[number].socket, { type: "start", gameId: room.gameId });
       }
       return;
     }
