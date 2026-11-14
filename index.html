@@ -175,6 +175,20 @@ section { margin-bottom: 28px; }
 #stage ruffle-player, #stage ruffle-embed {
   display: block; width: 100%; height: 100%; max-width: 100%; max-height: 100%;
 }
+#remoteScreen {
+  display: none; width: 100%; height: 100%; background: #000; object-fit: contain;
+}
+#streamStatus {
+  display: none; position: absolute; z-index: 4; left: 50%; top: 50%;
+  transform: translate(-50%, -50%); max-width: calc(100% - 32px);
+  padding: 10px 14px; border-radius: 10px; background: rgba(0,0,0,.72);
+  color: #fff; text-align: center;
+}
+#player.remote-view #remoteScreen { display: block; }
+#player.remote-view #stage > ruffle-player,
+#player.remote-view #stage > ruffle-embed { display: none; }
+#player.remote-view #streamStatus:not([hidden]) { display: block; }
+#player.online-game #reloadBtn { display: none; }
 #touchControls {
   position: fixed; z-index: 105; left: max(14px, env(safe-area-inset-left, 0px));
   right: max(14px, env(safe-area-inset-right, 0px));
@@ -233,7 +247,7 @@ section { margin-bottom: 28px; }
 <div id="lobby" role="dialog" aria-modal="true" aria-labelledby="lobbyTitle">
   <div id="lobbyCard">
     <h2 id="lobbyTitle">Bubble Trouble online</h2>
-    <p>Un jugador crea la sala y comparte el código con el otro.</p>
+    <p>El anfitrión ejecuta el juego y comparte la pantalla; el segundo jugador la ve y envía sus controles.</p>
     <p id="lobbyStatus" role="status">Conectando al servidor...</p>
     <div id="roomCode" hidden></div>
     <input id="roomInput" type="text" inputmode="text" maxlength="8" placeholder="Código de sala" aria-label="Código de sala" autocomplete="off">
@@ -254,7 +268,11 @@ section { margin-bottom: 28px; }
     <button id="reloadBtn" type="button">Reiniciar</button>
     <button id="fsBtn" type="button">Pantalla completa</button>
   </div>
-  <div id="stage"><button id="reveal" type="button" aria-label="Mostrar barra">☰</button></div>
+  <div id="stage">
+    <video id="remoteScreen" autoplay playsinline muted></video>
+    <div id="streamStatus" role="status" hidden>Conectando con la pantalla del anfitrión...</div>
+    <button id="reveal" type="button" aria-label="Mostrar barra">☰</button>
+  </div>
   <div id="touchControls" aria-label="Controles táctiles">
     <div class="touch-group">
       <button class="touch-key" type="button" data-player1="37" data-player2="88" aria-label="Mover a la izquierda">◀</button>
@@ -429,7 +447,8 @@ function renderMain() {
 let current = null, ruffleEl = null, objectUrl = null;
 const multiplayer = {
   socket: null, token: null, code: null, seat: null,
-  ready: false, started: false, localKeys: new Set(), remoteKeys: new Set()
+  ready: false, started: false, localKeys: new Set(), remoteKeys: new Set(),
+  peer: null, stream: null, pendingCandidates: []
 };
 const touchPointers = new Map();
 const touchKeyCounts = new Map();
@@ -445,27 +464,48 @@ async function mountPlayer(game) {
   try {
     if (game.blob) {
       const buf = new Uint8Array(await game.blob.arrayBuffer());
-      ruffleEl.load({ data: buf, ...cfg });
+      await ruffleEl.load({ data: buf, ...cfg });
     } else {
-      ruffleEl.load({ url: game.swf, ...cfg });
+      await ruffleEl.load({ url: game.swf, ...cfg });
     }
-  } catch (e) { toast("No se pudo abrir este juego."); }
+    return ruffleEl;
+  } catch (e) {
+    toast("No se pudo abrir este juego.");
+    return null;
+  }
 }
 
-function openGame(game) {
+async function openGame(game) {
   current = game;
   $("#ptitle").textContent = game.title;
   $("#player").classList.add("open");
+  $("#player").classList.remove("remote-view");
+  $("#player").classList.toggle("online-game", multiplayer.started);
   $("#player").classList.remove("hide-bar");
+  $("#remoteScreen").srcObject = null;
+  $("#streamStatus").hidden = true;
   $("#touchControls").classList.toggle("active", game.title === "Bubble Trouble");
   document.body.classList.add("locked");
-  mountPlayer(game);
+  return mountPlayer(game);
+}
+function openRemoteGame(game) {
+  current = game;
+  $("#ptitle").textContent = `${game.title} — pantalla compartida`;
+  $("#player").classList.add("open", "remote-view", "online-game");
+  $("#player").classList.remove("hide-bar");
+  $("#streamStatus").textContent = "Conectando con la pantalla del anfitrión...";
+  $("#streamStatus").hidden = false;
+  $("#touchControls").classList.add("active");
+  document.body.classList.add("locked");
 }
 function closeGame() {
   $("#player").classList.remove("open");
+  $("#player").classList.remove("remote-view", "online-game");
   $("#touchControls").classList.remove("active");
   document.body.classList.remove("locked");
   if (ruffleEl) { try { ruffleEl.remove(); } catch (e) {} ruffleEl = null; }
+  $("#remoteScreen").pause();
+  $("#remoteScreen").srcObject = null;
   if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
   current = null;
   leaveMultiplayer();
@@ -473,6 +513,13 @@ function closeGame() {
 $("#closeBtn").addEventListener("click", closeGame);
 $("#reloadBtn").addEventListener("click", () => { if (current) mountPlayer(current); });
 $("#reveal").addEventListener("click", () => $("#player").classList.remove("hide-bar"));
+$("#remoteScreen").addEventListener("playing", () => { $("#streamStatus").hidden = true; });
+$("#remoteScreen").addEventListener("click", () => {
+  $("#remoteScreen").play().catch(() => {
+    $("#streamStatus").textContent = "Toca la pantalla para iniciar el video.";
+    $("#streamStatus").hidden = false;
+  });
+});
 $("#fsBtn").addEventListener("click", () => {
   const p = $("#player");
   // iPhone no permite la API de pantalla completa en páginas: se oculta la barra para usar todo el espacio.
@@ -502,6 +549,10 @@ function resetLobbyUI() {
 }
 function updateRoomStatus(connectedPlayers) {
   multiplayer.ready = connectedPlayers === 2;
+  if (multiplayer.started && connectedPlayers < 2) {
+    releaseKeys(multiplayer.remoteKeys);
+    toast("El otro jugador se desconectó.");
+  }
   lobbyStatus(connectedPlayers === 2 ? "Los dos jugadores están conectados." : "Sala creada. Esperando al segundo jugador...");
   $("#startMatch").hidden = multiplayer.seat !== 1;
   $("#startMatch").disabled = !multiplayer.ready;
@@ -570,14 +621,10 @@ function connectRoom({ code, token, seat }) {
     let message;
     try { message = JSON.parse(event.data); } catch { return; }
     if (message.type === "status") updateRoomStatus(message.connectedPlayers);
-    if (message.type === "input") deliverKey(message.keyCode, message.down, multiplayer.remoteKeys);
-    if (message.type === "start") {
-      multiplayer.started = true;
-      const game = CATALOGS.flatMap((catalog) => catalog.games).find((item) => item.title === "Bubble Trouble");
-      if (!game) { lobbyStatus("No se encontró Bubble Trouble en el catálogo."); return; }
-      hideLobby();
-      openGame(game);
-    }
+    if (message.type === "input" && multiplayer.seat === 1) deliverKey(message.keyCode, message.down, multiplayer.remoteKeys);
+    if (message.type === "signal") handlePeerSignal(message.signal).catch(() => showPeerError("No se pudo conectar la transmisión entre los teléfonos."));
+    if (message.type === "media-error" && multiplayer.seat === 2) showPeerError("El anfitrión no pudo compartir la pantalla en este dispositivo.");
+    if (message.type === "start") startOnlineGame().catch(() => showPeerError("No se pudo iniciar la partida compartida."));
     if (message.type === "error") lobbyStatus(message.message || "Error de conexión en la sala.");
   });
   socket.addEventListener("close", () => {
@@ -588,6 +635,106 @@ function connectRoom({ code, token, seat }) {
     if (multiplayer.code) lobbyStatus("Se perdió la conexión con la sala.");
   });
   socket.addEventListener("error", () => lobbyStatus("No se pudo conectar. Verifica que el servidor esté publicado con HTTPS."));
+}
+function sendSignal(signal) {
+  const socket = multiplayer.socket;
+  if (socket?.readyState !== WebSocket.OPEN) throw new Error("Se perdió la conexión con la sala.");
+  socket.send(JSON.stringify({ type: "signal", signal }));
+}
+function createPeerConnection() {
+  if (multiplayer.peer) return multiplayer.peer;
+  if (!window.RTCPeerConnection) throw new Error("Este navegador no admite transmisión WebRTC.");
+  const peer = new RTCPeerConnection({
+    iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+  });
+  multiplayer.peer = peer;
+  peer.addEventListener("icecandidate", (event) => {
+    if (!event.candidate || multiplayer.peer !== peer) return;
+    try { sendSignal({ type: "candidate", candidate: event.candidate.toJSON() }); }
+    catch { showPeerError("No se pudo enviar la señal de conexión."); }
+  });
+  peer.addEventListener("connectionstatechange", () => {
+    if (multiplayer.peer !== peer) return;
+    if (peer.connectionState === "failed") showPeerError("No se pudo establecer el video entre los teléfonos. Intenta de nuevo.");
+  });
+  peer.addEventListener("track", (event) => {
+    if (multiplayer.seat !== 2) return;
+    $("#remoteScreen").srcObject = event.streams[0] || new MediaStream([event.track]);
+    $("#remoteScreen").play().catch(() => {
+      $("#streamStatus").textContent = "Toca la pantalla para iniciar el video.";
+      $("#streamStatus").hidden = false;
+    });
+  });
+  return peer;
+}
+async function findGameCanvas() {
+  const deadline = Date.now() + 15000;
+  while (Date.now() < deadline) {
+    const canvas = ruffleEl?.shadowRoot?.querySelector("canvas");
+    if (canvas && canvas.width && canvas.height) return canvas;
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+  throw new Error("Ruffle no expuso el lienzo del juego para transmitir.");
+}
+async function startHostStream() {
+  const canvas = await findGameCanvas();
+  if (typeof canvas.captureStream !== "function") {
+    throw new Error("Este navegador no admite compartir el lienzo del juego.");
+  }
+  const stream = canvas.captureStream(30);
+  if (!stream.getVideoTracks().length) throw new Error("No se pudo capturar el video del juego.");
+  multiplayer.stream = stream;
+  const peer = createPeerConnection();
+  for (const track of stream.getTracks()) peer.addTrack(track, stream);
+  await peer.setLocalDescription(await peer.createOffer());
+  sendSignal({ type: peer.localDescription.type, sdp: peer.localDescription.sdp });
+}
+async function startOnlineGame() {
+  if (multiplayer.started) return;
+  multiplayer.started = true;
+  const game = CATALOGS.flatMap((catalog) => catalog.games).find((item) => item.title === "Bubble Trouble");
+  if (!game) throw new Error("No se encontró Bubble Trouble en el catálogo.");
+  hideLobby();
+  if (multiplayer.seat === 1) {
+    await openGame(game);
+    try {
+      await startHostStream();
+      toast("Partida compartida. El otro jugador verá esta pantalla.");
+    } catch (error) {
+      multiplayer.socket?.send(JSON.stringify({ type: "media-error" }));
+      showPeerError(error.message);
+    }
+  } else {
+    openRemoteGame(game);
+    createPeerConnection();
+  }
+}
+async function handlePeerSignal(signal) {
+  if (!signal || !multiplayer.started) return;
+  const peer = createPeerConnection();
+  if (signal.type === "offer" && multiplayer.seat === 2) {
+    await peer.setRemoteDescription(signal);
+    for (const candidate of multiplayer.pendingCandidates.splice(0)) await peer.addIceCandidate(candidate);
+    await peer.setLocalDescription(await peer.createAnswer());
+    sendSignal({ type: peer.localDescription.type, sdp: peer.localDescription.sdp });
+    return;
+  }
+  if (signal.type === "answer" && multiplayer.seat === 1) {
+    await peer.setRemoteDescription(signal);
+    for (const candidate of multiplayer.pendingCandidates.splice(0)) await peer.addIceCandidate(candidate);
+    return;
+  }
+  if (signal.type === "candidate") {
+    if (peer.remoteDescription) await peer.addIceCandidate(signal.candidate);
+    else multiplayer.pendingCandidates.push(signal.candidate);
+  }
+}
+function showPeerError(message) {
+  toast(message);
+  if (multiplayer.seat === 2 && $("#player").classList.contains("remote-view")) {
+    $("#streamStatus").textContent = message;
+    $("#streamStatus").hidden = false;
+  }
 }
 function deliverKey(keyCode, down, held) {
   if (down === held.has(keyCode)) return;
@@ -608,15 +755,27 @@ function releaseKeys(held) {
 }
 function sendPlayerKey(keyCode, down) {
   const socket = multiplayer.socket;
-  if (down === multiplayer.localKeys.has(keyCode)) return;
-  deliverKey(keyCode, down, multiplayer.localKeys);
-  if (multiplayer.started && socket?.readyState === WebSocket.OPEN) {
-    socket.send(JSON.stringify({ type: "input", keyCode, down }));
+  if (multiplayer.started && multiplayer.seat === 2) {
+    if (down === multiplayer.localKeys.has(keyCode)) return;
+    if (down) multiplayer.localKeys.add(keyCode); else multiplayer.localKeys.delete(keyCode);
+    if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "input", keyCode, down }));
+    return;
   }
+  deliverKey(keyCode, down, multiplayer.localKeys);
 }
 function leaveMultiplayer() {
+  if (multiplayer.started && multiplayer.seat === 2) {
+    for (const keyCode of [...multiplayer.localKeys]) sendPlayerKey(keyCode, false);
+  }
   releaseKeys(multiplayer.localKeys);
   releaseKeys(multiplayer.remoteKeys);
+  if (multiplayer.peer) {
+    multiplayer.peer.close();
+    multiplayer.peer = null;
+  }
+  for (const track of multiplayer.stream?.getTracks() || []) track.stop();
+  multiplayer.stream = null;
+  multiplayer.pendingCandidates = [];
   multiplayer.code = null;
   multiplayer.token = null;
   multiplayer.seat = null;
@@ -640,7 +799,9 @@ $("#createRoom").addEventListener("click", async () => {
     const room = await requestRoom("/api/rooms");
     connectRoom(room);
   } catch (error) {
-    lobbyStatus(error instanceof TypeError ? "No se alcanzó el servidor online. Despliega este proyecto en Node y abre la web desde su HTTPS." : error.message);
+    lobbyStatus(error instanceof TypeError
+      ? "No se pudo conectar con Render. Verifica que https://arcade-swf-multiplayer.onrender.com/health responda {\"ok\":true} y que ALLOWED_ORIGINS en Render coincida exactamente con tu URL de Netlify."
+      : error.message);
   }
 });
 $("#joinRoom").addEventListener("click", async () => {
@@ -650,7 +811,9 @@ $("#joinRoom").addEventListener("click", async () => {
     const room = await requestRoom("/api/rooms/join", { code });
     connectRoom(room);
   } catch (error) {
-    lobbyStatus(error instanceof TypeError ? "No se alcanzó el servidor online. Despliega este proyecto en Node y abre la web desde su HTTPS." : error.message);
+    lobbyStatus(error instanceof TypeError
+      ? "No se pudo conectar con Render. Verifica que https://arcade-swf-multiplayer.onrender.com/health responda {\"ok\":true} y que ALLOWED_ORIGINS en Render coincida exactamente con tu URL de Netlify."
+      : error.message);
   }
 });
 $("#startMatch").addEventListener("click", () => {
@@ -712,7 +875,11 @@ function releaseTouchPointers() {
 }
 window.addEventListener("blur", () => {
   releaseTouchPointers();
-  releaseKeys(multiplayer.localKeys);
+  if (multiplayer.started && multiplayer.seat === 2) {
+    for (const keyCode of [...multiplayer.localKeys]) sendPlayerKey(keyCode, false);
+  } else {
+    releaseKeys(multiplayer.localKeys);
+  }
 });
 const inviteCode = new URLSearchParams(location.search).get("room");
 if (inviteCode) {

@@ -17,16 +17,19 @@ Para desarrollo local, ejecuta `npm install` y `npm start`; abre `http://localho
 
 ### Si aparece HTTP 404 al crear una sala
 
-- Abre `https://arcade-swf-multiplayer.onrender.com/health`. Debe responder `{"ok":true}`. Si devuelve 404, el servicio de Render todavía no existe con ese nombre, está suspendido/no desplegado o no ejecuta `server.js`; crea o actualiza el Blueprint de Render con `render.yaml`.
+- Abre `https://arcade-swf-multiplayer.onrender.com/health`. Debe responder `{"ok":true}`. Si devuelve 404, Render todavía no está ejecutando `server.js` en esa URL. En el Dashboard de Render crea el Blueprint del repositorio con `render.yaml`, espera a que el despliegue termine y vuelve a comprobar `/health`.
 - Si Render muestra otra URL pública, configura `ARCADE_MULTIPLAYER_SERVER` en Netlify con esa URL base, sin `/health` ni barra final, y vuelve a desplegar.
-- Confirma que `ALLOWED_ORIGINS` en Render coincida exactamente con el origen del sitio Netlify.
+- Cuando `/health` funcione, confirma que `ALLOWED_ORIGINS` en Render coincida exactamente con el origen del sitio Netlify. Después vuelve a desplegar el servicio de Render.
+- Publica de nuevo Netlify después de desplegar Render para que los dos sitios queden usando la configuración actual.
 
 ## Crear una partida
 
-En un teléfono toca **Multijugador → Crear sala** y comparte el código o la invitación. En el otro, abre la invitación o escribe el código y toca **Unirse a una sala**. Cuando los dos aparezcan conectados, el jugador 1 inicia la partida.
+En un teléfono toca **Multijugador → Crear sala** y comparte el código o la invitación. En el otro, abre la invitación o escribe el código y toca **Unirse a una sala**. Cuando los dos aparezcan conectados, el jugador 1 inicia la partida. El anfitrión ejecuta el SWF y transmite el video del juego; el segundo teléfono ve esa misma partida y sus botones envían los controles del jugador 2 al anfitrión. Así ambos ven el mismo movimiento y los mismos reinicios.
 
-Bubble Trouble muestra los botones táctiles también en partidas individuales desde iPhone: izquierda/derecha/disparo para el jugador 1. En multijugador, el segundo teléfono usa esos mismos botones para enviar los controles X/W/C del jugador 2.
+Bubble Trouble muestra los botones táctiles también en partidas individuales desde iPhone: izquierda/derecha/disparo para el jugador 1. En multijugador, el segundo teléfono usa esos mismos botones para enviar los controles X/W/C del jugador 2. La transmisión entre los teléfonos usa WebRTC y un servidor STUN público; la conexión directa puede fallar en algunas redes móviles o Wi-Fi restrictivas.
 
-El servidor retransmite las pulsaciones; cada teléfono ejecuta su propia copia del SWF. No modifica el motor Flash ni impone un estado de juego autoritativo, así que la sincronización depende del juego y de la conexión. El plan gratuito de Render puede suspender el servicio cuando no se usa; la primera conexión posterior puede tardar en despertar el servidor.
+El segundo teléfono recibe video en tiempo real de la pantalla del anfitrión; no ejecuta una segunda copia del SWF. La calidad y latencia dependen de la conexión y del dispositivo anfitrión. El plan gratuito de Render puede suspender el servicio cuando no se usa; la primera conexión posterior puede tardar en despertar el servidor.
+
+Después de actualizar el código, despliega tanto el servicio de Render como el sitio de Netlify desde la rama `main`. Render debe ejecutar la versión del servidor que retransmite los mensajes de señalización WebRTC; Netlify debe publicar el cliente actualizado.
 
 Zombie Trailer Park conserva los 24 FPS definidos en su archivo SWF. El reproductor usa calidad media para reducir la carga gráfica, pero no se pueden añadir cuadros de animación que no existan en el archivo original.

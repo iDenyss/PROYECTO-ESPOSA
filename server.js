@@ -79,6 +79,26 @@ function broadcastStatus(room) {
   for (const seat of [1, 2]) send(room.players[seat]?.socket, { type: "status", connectedPlayers });
 }
 
+function validSignal(seat, signal) {
+  if (!signal || typeof signal !== "object" || Array.isArray(signal)) return false;
+  if (signal.type === "offer" || signal.type === "answer") {
+    return (signal.type === "offer" ? seat === 1 : seat === 2)
+      && typeof signal.sdp === "string"
+      && signal.sdp.length > 0
+      && signal.sdp.length <= 60_000;
+  }
+  if (signal.type !== "candidate") return false;
+  if (signal.candidate === null) return true;
+  const candidate = signal.candidate;
+  return candidate
+    && typeof candidate === "object"
+    && !Array.isArray(candidate)
+    && typeof candidate.candidate === "string"
+    && candidate.candidate.length <= 4096
+    && (candidate.sdpMid === null || typeof candidate.sdpMid === "string" && candidate.sdpMid.length <= 256)
+    && (candidate.sdpMLineIndex === null || Number.isInteger(candidate.sdpMLineIndex) && candidate.sdpMLineIndex >= 0 && candidate.sdpMLineIndex <= 255);
+}
+
 function handleHttp(req, res) {
   const url = new URL(req.url, "http://localhost");
   const origin = req.headers.origin;
@@ -158,7 +178,7 @@ function handleHttp(req, res) {
 const server = http.createServer((req, res) => {
   handleHttp(req, res);
 });
-const webSockets = new WebSocketServer({ noServer: true, maxPayload: 1024, perMessageDeflate: false });
+const webSockets = new WebSocketServer({ noServer: true, maxPayload: 65_536, perMessageDeflate: false });
 
 server.on("upgrade", (req, socket, head) => {
   const url = new URL(req.url, "http://localhost");
@@ -193,7 +213,7 @@ webSockets.on("connection", (client, room, seat) => {
   client.on("message", (data) => {
     const now = Date.now();
     if (now - intervalStart >= 1000) { intervalStart = now; messageCount = 0; }
-    if (++messageCount > 60) { client.close(1008, "Rate limit"); return; }
+    if (++messageCount > 120) { client.close(1008, "Rate limit"); return; }
     let message;
     try { message = JSON.parse(data.toString()); }
     catch { client.close(1008, "Invalid message"); return; }
@@ -206,6 +226,21 @@ webSockets.on("connection", (client, room, seat) => {
       send(room.players[seat === 1 ? 2 : 1]?.socket, {
         type: "input", keyCode: message.keyCode, down: message.down
       });
+      return;
+    }
+    if (message.type === "signal") {
+      if (!room.started || !validSignal(seat, message.signal)) {
+        client.close(1008, "Invalid signal");
+        return;
+      }
+      room.lastActive = now;
+      send(room.players[seat === 1 ? 2 : 1]?.socket, {
+        type: "signal", signal: message.signal
+      });
+      return;
+    }
+    if (message.type === "media-error" && seat === 1 && room.started) {
+      send(room.players[2]?.socket, { type: "media-error" });
       return;
     }
     if (message.type === "start" && seat === 1 && !room.started) {
