@@ -189,6 +189,14 @@ section { margin-bottom: 28px; }
 #player.remote-view #stage > ruffle-embed { display: none; }
 #player.remote-view #streamStatus:not([hidden]) { display: block; }
 #player.online-game #reloadBtn { display: none; }
+#player.portrait-game #stage { margin-bottom: clamp(96px, 18dvh, 160px); }
+#portraitNotice {
+  display: none; position: absolute; inset: 0; z-index: 120;
+  place-items: center; padding: 24px; background: #000; color: #fff;
+  text-align: center; font-size: 1.2rem; font-weight: 700;
+}
+#portraitNotice span { max-width: 22em; }
+#player.portrait-game #portraitNotice { display: none; }
 #touchControls {
   position: fixed; z-index: 105; left: max(14px, env(safe-area-inset-left, 0px));
   right: max(14px, env(safe-area-inset-right, 0px));
@@ -196,7 +204,7 @@ section { margin-bottom: 28px; }
   justify-content: center; align-items: end; pointer-events: none;
 }
 #touchControls.active { display: flex; }
-.touch-group { display: flex; align-items: end; gap: 10px; pointer-events: auto; }
+.touch-group { display: flex; align-items: end; gap: clamp(18px, 5vw, 28px); pointer-events: auto; }
 #touchControls, .touch-group, .touch-key {
   user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
 }
@@ -206,8 +214,20 @@ section { margin-bottom: 28px; }
   background: rgba(20,21,43,.72); color: #fff; font-size: 1.5rem; font-weight: 800;
   touch-action: none;
 }
-.touch-key.fire { width: clamp(66px, 18vw, 88px); height: clamp(66px, 18vw, 88px); background: rgba(228,40,95,.82); font-size: .9rem; }
+.touch-key.fire {
+  position: relative; width: clamp(66px, 18vw, 88px); height: clamp(66px, 18vw, 88px);
+  background: rgba(228,40,95,.82); font-size: .9rem;
+}
+.touch-key.fire::after {
+  content: ""; position: absolute; left: 50%; top: 50%; width: 18px; height: 18px;
+  border: 2px solid currentColor; border-radius: 50%; transform: translate(-50%, -50%);
+}
 .touch-key.pressed { transform: scale(.94); background: rgba(18,165,148,.9); }
+@media (orientation: landscape) and (max-height: 600px) {
+  #player.portrait-game #portraitNotice { display: grid; }
+  #player.portrait-game #touchControls { display: none !important; }
+  #player.portrait-game #stage { visibility: hidden; }
+}
 #player.hide-bar .bar { display: none; }
 #reveal {
   display: none; position: absolute; top: 8px; right: 8px; z-index: 5; width: 40px; height: 40px;
@@ -276,10 +296,11 @@ section { margin-bottom: 28px; }
   <div id="touchControls" aria-label="Controles táctiles">
     <div class="touch-group">
       <button class="touch-key" type="button" data-player1="37" data-player2="88" aria-label="Mover a la izquierda">◀</button>
-      <button class="touch-key" type="button" data-player1="32" data-player2="67" aria-label="Disparar">TIRAR</button>
-      <button class="touch-key" type="button" data-player1="39" data-player2="87" aria-label="Mover a la derecha">▶</button>
+      <button class="touch-key fire" type="button" data-player1="32" data-player2="87" aria-label="Disparar"></button>
+      <button class="touch-key" type="button" data-player1="39" data-player2="67" aria-label="Mover a la derecha">▶</button>
     </div>
   </div>
+  <div id="portraitNotice" role="status"><span>Gira el teléfono en vertical para jugar.</span></div>
 </div>
 <div id="toast" role="status"></div>
 
@@ -481,6 +502,7 @@ async function openGame(game) {
   $("#player").classList.add("open");
   $("#player").classList.remove("remote-view");
   $("#player").classList.toggle("online-game", multiplayer.started);
+  $("#player").classList.toggle("portrait-game", game.title === "Bubble Trouble");
   $("#player").classList.remove("hide-bar");
   $("#remoteScreen").srcObject = null;
   $("#streamStatus").hidden = true;
@@ -492,6 +514,7 @@ function openRemoteGame(game) {
   current = game;
   $("#ptitle").textContent = `${game.title} — pantalla compartida`;
   $("#player").classList.add("open", "remote-view", "online-game");
+  $("#player").classList.add("portrait-game");
   $("#player").classList.remove("hide-bar");
   $("#streamStatus").textContent = "Conectando con la pantalla del anfitrión...";
   $("#streamStatus").hidden = false;
@@ -500,7 +523,7 @@ function openRemoteGame(game) {
 }
 function closeGame() {
   $("#player").classList.remove("open");
-  $("#player").classList.remove("remote-view", "online-game");
+  $("#player").classList.remove("remote-view", "online-game", "portrait-game");
   $("#touchControls").classList.remove("active");
   document.body.classList.remove("locked");
   if (ruffleEl) { try { ruffleEl.remove(); } catch (e) {} ruffleEl = null; }
