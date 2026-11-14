@@ -178,8 +178,6 @@ section { margin-bottom: 28px; }
   font-weight: 700;
   min-height: 44px;
 }
-#onlineBtn { margin-left: auto; }
-
 .lobby {
   position: fixed;
   inset: 0;
@@ -349,7 +347,7 @@ section { margin-bottom: 28px; }
 .joystick {
   position: absolute;
   left: max(24px, env(safe-area-inset-left, 0px) + 20px);
-  bottom: max(150px, env(safe-area-inset-bottom, 0px) + 145px);
+  bottom: max(48px, env(safe-area-inset-bottom, 0px) + 36px);
   width: clamp(118px, 22vw, 164px);
   height: clamp(118px, 22vw, 164px);
   border: 2px solid rgba(255,255,255,.48);

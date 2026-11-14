@@ -458,13 +458,16 @@ function App() {
       if (response.status === 404) throw new Error(`El servidor ${serverUrl} respondió 404. Comprueba que Render haya desplegado server.js.`);
       throw new Error(`El servidor online respondió con datos inválidos (HTTP ${response.status}).`);
     }
+    if (response.status === 403) {
+      throw new Error(`Render rechazó el origen ${location.origin}. Configura ALLOWED_ORIGINS en Render con esa URL exacta (sin ruta ni barra final).`);
+    }
     if (!response.ok) throw new Error(result?.error || `No se pudo crear o abrir la sala (HTTP ${response.status}).`);
     return result;
   };
 
   const createRoom = async () => {
     try { connectRoom(await requestRoom("/api/rooms", { gameId: lobbyGame.id })); }
-    catch (error) { setLobbyStatus(error instanceof TypeError ? "No se pudo conectar con Render. Comprueba el servicio y ALLOWED_ORIGINS." : error.message); }
+    catch (error) { setLobbyStatus(error instanceof TypeError ? `No se pudo conectar con Render desde ${location.origin}. Comprueba que ALLOWED_ORIGINS en Render incluya esa URL exacta.` : error.message); }
   };
 
   const joinRoom = async () => {
@@ -476,7 +479,7 @@ function App() {
       if (game) setLobbyGame(game);
       connectRoom(room);
     }
-    catch (error) { setLobbyStatus(error instanceof TypeError ? "No se pudo conectar con Render. Comprueba el servicio y ALLOWED_ORIGINS." : error.message); }
+    catch (error) { setLobbyStatus(error instanceof TypeError ? `No se pudo conectar con Render desde ${location.origin}. Comprueba que ALLOWED_ORIGINS en Render incluya esa URL exacta.` : error.message); }
   };
 
   const startMatch = () => {
@@ -589,7 +592,6 @@ function App() {
         <div className="brand">
           <div className="logo" aria-hidden="true">🕹️</div>
           <h1>Arcade SWF</h1>
-          <button className="add-btn" id="onlineBtn" type="button" onClick={() => openLobby()}>Multijugador</button>
           <button className="add-btn" type="button" onClick={() => document.getElementById("fileInput").click()}>Agregar SWF</button>
         </div>
         <input className="search" type="search" placeholder="Buscar juego" aria-label="Buscar juego" autoComplete="off" value={search} onChange={(event) => setSearch(event.target.value)} />
@@ -605,7 +607,7 @@ function App() {
           <section key={catalog.id}>
             <div className="sec-head"><h2>{catalog.name}</h2><span>{catalog.games.length} {catalog.games.length === 1 ? "juego" : "juegos"}</span></div>
             <div className="grid">
-              {catalog.games.map((game) => <GameTile key={game.swf} game={game} subtitle={catalog.name} onPlay={openGame} onMultiplayer={game.controls === "icecream" ? openLobby : undefined} />)}
+              {catalog.games.map((game) => <GameTile key={game.swf} game={game} subtitle={catalog.name} onPlay={openGame} onMultiplayer={game.controls === "icecream" || game.id === "bubble-trouble" || game.title === "Bubble Trouble" ? openLobby : undefined} />)}
             </div>
           </section>
         ))}
