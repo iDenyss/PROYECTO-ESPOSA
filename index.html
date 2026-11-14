@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Arcade SWF</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Arcade SWF">
+<meta name="theme-color" content="#1c1e3a">
+<style>
+:root {
+  --bg: #eef0f7;
+  --ink: #1c1e3a;
+  --muted: #5d6185;
+  --card: #ffffff;
+  --line: #d9ddec;
+  --accent: #e4285f;
+  --accent-ink: #ffffff;
+  --sun: #ffc933;
+  --teal: #12a594;
+  --header: #1c1e3a;
+  --header-ink: #f4f5ff;
+  box-sizing: border-box;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14152b;
+    --ink: #eceeff;
+    --muted: #a3a8d1;
+    --card: #1f2142;
+    --line: #2f3260;
+    --header: #0d0e20;
+  }
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html { height: 100%; scroll-padding-top: env(safe-area-inset-top, 0px); }
+body {
+  margin: 0; min-height: 100%;
+  background: var(--bg); color: var(--ink);
+  font-family: ui-rounded, "SF Pro Rounded", "Avenir Next Rounded", "Nunito", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 16px; line-height: 1.4;
+  -webkit-text-size-adjust: 100%;
+}
+body.locked { overflow: hidden; }
+button { font: inherit; color: inherit; cursor: pointer; }
+:focus-visible { outline: 3px solid var(--sun); outline-offset: 2px; }
+
+/* Barra superior fija */
+body::before {
+  content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px);
+  background: var(--header); z-index: 20;
+}
+header {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 10;
+  background: var(--header); color: var(--header-ink);
+  padding: 10px 14px 0;
+}
+.brand { display: flex; align-items: center; gap: 10px; }
+.logo {
+  width: 34px; height: 34px; border-radius: 9px; background: var(--accent);
+  display: grid; place-items: center; font-size: 19px; flex: none;
+  transform: rotate(-6deg);
+}
+h1 { font-size: 1.35rem; margin: 0; letter-spacing: -0.01em; flex: 1; }
+.add-btn {
+  background: var(--sun); color: #2a2200; border: 0; border-radius: 999px;
+  padding: 8px 14px; font-weight: 700; font-size: .9rem; min-height: 40px;
+}
+.search {
+  margin: 10px 0; width: 100%; border: 0; border-radius: 12px;
+  padding: 11px 14px; font: inherit; font-size: 16px; /* 16px evita el zoom de iOS */
+  background: rgba(255,255,255,.12); color: var(--header-ink);
+}
+.search::placeholder { color: rgba(244,245,255,.6); }
+.chips {
+  display: flex; gap: 8px; overflow-x: auto; padding: 0 0 12px;
+  scroll-snap-type: x proximity; scrollbar-width: none;
+  margin: 0 -14px; padding-left: 14px; padding-right: 14px;
+}
+.chips::-webkit-scrollbar { display: none; }
+.chip {
+  flex: none; scroll-snap-align: start; border: 0; border-radius: 999px;
+  padding: 8px 15px; min-height: 38px; font-weight: 600; font-size: .92rem;
+  background: rgba(255,255,255,.12); color: var(--header-ink);
+}
+.chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+
+main { padding: 16px 14px 40px; max-width: 1200px; margin: 0 auto; }
+section { margin-bottom: 28px; }
+.sec-head { display: flex; align-items: baseline; gap: 8px; margin: 0 0 10px; }
+.sec-head h2 { font-size: 1.15rem; margin: 0; }
+.sec-head span { color: var(--muted); font-size: .88rem; }
+
+.grid {
+  display: grid; gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+}
+.tile {
+  position: relative; background: var(--card); border: 1px solid var(--line);
+  border-radius: 14px; overflow: hidden; display: flex; flex-direction: column;
+}
+.tile > .play { all: unset; display: block; cursor: pointer; }
+.tile > .play:focus-visible { outline: 3px solid var(--sun); outline-offset: -3px; }
+.art {
+  aspect-ratio: 4 / 3; display: grid; place-items: center; font-size: 2.6rem;
+  background-size: cover; background-position: center;
+}
+.meta { padding: 9px 11px 11px; }
+.meta b { display: block; font-size: .95rem; line-height: 1.25; overflow-wrap: anywhere; }
+.meta small { color: var(--muted); font-size: .8rem; }
+.del {
+  position: absolute; top: 6px; right: 6px; width: 34px; height: 34px;
+  border-radius: 50%; border: 0; background: rgba(0,0,0,.6); color: #fff; font-size: 1.1rem;
+}
+.empty {
+  border: 2px dashed var(--line); border-radius: 14px; padding: 22px 16px;
+  color: var(--muted); text-align: center;
+}
+.empty button {
+  margin-top: 10px; background: var(--accent); color: var(--accent-ink); border: 0;
+  border-radius: 999px; padding: 10px 18px; font-weight: 700; min-height: 44px;
+}
+#onlineBtn { margin-left: auto; }
+#lobby {
+  position: fixed; inset: 0; z-index: 50; display: none; place-items: center;
+  padding: 20px; background: rgba(0,0,0,.68);
+}
+#lobby.open { display: grid; }
+#lobbyCard {
+  width: min(100%, 390px); padding: 22px; border-radius: 18px;
+  background: var(--card); color: var(--ink); box-shadow: 0 16px 48px rgba(0,0,0,.3);
+}
+#lobbyCard h2 { margin: 0 0 8px; }
+#lobbyStatus { color: var(--muted); min-height: 2.8em; margin: 12px 0; }
+#roomCode, #roomInput {
+  width: 100%; padding: 12px; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--bg); color: var(--ink); font: inherit; text-align: center;
+}
+#roomCode { font-size: 1.5rem; font-weight: 800; letter-spacing: .18em; }
+.lobby-actions { display: grid; gap: 9px; margin-top: 12px; }
+.lobby-actions button {
+  min-height: 44px; border: 0; border-radius: 10px; padding: 10px 14px;
+  background: var(--accent); color: var(--accent-ink); font-weight: 700;
+}
+.lobby-actions button.secondary { background: var(--line); color: var(--ink); }
+.lobby-actions button:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Reproductor a pantalla completa */
+#player {
+  position: fixed; inset: 0; z-index: 100; background: #000; display: none;
+  flex-direction: column; height: 100vh; height: 100dvh;
+}
+#player.open { display: flex; }
+.bar {
+  display: flex; align-items: center; gap: 8px; background: var(--header); color: var(--header-ink);
+  padding: env(safe-area-inset-top, 0px) max(10px, env(safe-area-inset-right, 0px)) 0 max(10px, env(safe-area-inset-left, 0px));
+  min-height: calc(48px + env(safe-area-inset-top, 0px));
+}
+.bar .title { flex: 1; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar button {
+  border: 0; border-radius: 10px; padding: 8px 12px; min-height: 40px;
+  background: rgba(255,255,255,.14); color: var(--header-ink); font-weight: 600; font-size: .9rem;
+}
+.bar .close { background: var(--accent); }
+#stage {
+  flex: 1; min-height: 0; position: relative;
+  min-width: 0; overflow: hidden; background: #000;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px);
+}
+#stage ruffle-player, #stage ruffle-embed {
+  display: block; width: 100%; height: 100%; max-width: 100%; max-height: 100%;
+}
+#touchControls {
+  position: fixed; z-index: 105; left: max(14px, env(safe-area-inset-left, 0px));
+  right: max(14px, env(safe-area-inset-right, 0px));
+  bottom: max(20px, env(safe-area-inset-bottom, 0px)); display: none;
+  justify-content: center; align-items: end; pointer-events: none;
+}
+#touchControls.active { display: flex; }
+.touch-group { display: flex; align-items: end; gap: 10px; pointer-events: auto; }
+#touchControls, .touch-group, .touch-key {
+  user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+}
+.touch-key {
+  width: clamp(58px, 16vw, 78px); height: clamp(58px, 16vw, 78px);
+  border: 1px solid rgba(255,255,255,.55); border-radius: 50%;
+  background: rgba(20,21,43,.72); color: #fff; font-size: 1.5rem; font-weight: 800;
+  touch-action: none;
+}
+.touch-key.fire { width: clamp(66px, 18vw, 88px); height: clamp(66px, 18vw, 88px); background: rgba(228,40,95,.82); font-size: .9rem; }
+.touch-key.pressed { transform: scale(.94); background: rgba(18,165,148,.9); }
+#player.hide-bar .bar { display: none; }
+#reveal {
+  display: none; position: absolute; top: 8px; right: 8px; z-index: 5; width: 40px; height: 40px;
+  border-radius: 50%; border: 0; background: rgba(0,0,0,.55); color: #fff; font-size: 1.1rem;
+}
+#player.hide-bar #reveal { display: block; }
+@media (max-height: 460px) { .bar { min-height: calc(40px + env(safe-area-inset-top, 0px)); } .bar button { min-height: 34px; padding: 5px 10px; } }
+
+#toast {
+  position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
+  background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 12px; z-index: 200;
+  max-width: calc(100% - 28px); display: none; font-size: .92rem;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .tile { transition: transform .12s ease; }
+  .tile:active { transform: scale(.97); }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="logo" aria-hidden="true">🕹️</div>
+    <h1>Arcade SWF</h1>
+    <button class="add-btn" id="onlineBtn" type="button">Multijugador</button>
+    <button class="add-btn" id="addBtn" type="button">Agregar SWF</button>
+  </div>
+  <input class="search" id="q" type="search" placeholder="Buscar juego" aria-label="Buscar juego" autocomplete="off">
+  <nav class="chips" id="chips" aria-label="Catálogos"></nav>
+</header>
+
+<main id="main"></main>
+
+<input type="file" id="file" accept=".swf,application/x-shockwave-flash,application/octet-stream" multiple hidden>
+
+<div id="lobby" role="dialog" aria-modal="true" aria-labelledby="lobbyTitle">
+  <div id="lobbyCard">
+    <h2 id="lobbyTitle">Bubble Trouble online</h2>
+    <p>Un jugador crea la sala y comparte el código con el otro.</p>
+    <p id="lobbyStatus" role="status">Conectando al servidor...</p>
+    <div id="roomCode" hidden></div>
+    <input id="roomInput" type="text" inputmode="text" maxlength="8" placeholder="Código de sala" aria-label="Código de sala" autocomplete="off">
+    <div class="lobby-actions">
+      <button id="createRoom" type="button">Crear sala</button>
+      <button id="joinRoom" type="button">Unirse a una sala</button>
+      <button id="copyRoom" class="secondary" type="button" hidden>Copiar invitación</button>
+      <button id="startMatch" type="button" hidden disabled>Esperando al otro jugador</button>
+      <button id="cancelLobby" class="secondary" type="button">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<div id="player" role="dialog" aria-modal="true" aria-label="Reproductor">
+  <div class="bar">
+    <button class="close" id="closeBtn" type="button">Cerrar</button>
+    <div class="title" id="ptitle"></div>
+    <button id="reloadBtn" type="button">Reiniciar</button>
+    <button id="fsBtn" type="button">Pantalla completa</button>
+  </div>
+  <div id="stage"><button id="reveal" type="button" aria-label="Mostrar barra">☰</button></div>
+  <div id="touchControls" aria-label="Controles táctiles">
+    <div class="touch-group">
+      <button class="touch-key" type="button" data-player1="37" data-player2="88" aria-label="Mover a la izquierda">◀</button>
+      <button class="touch-key" type="button" data-player1="32" data-player2="67" aria-label="Disparar">TIRAR</button>
+      <button class="touch-key" type="button" data-player1="39" data-player2="87" aria-label="Mover a la derecha">▶</button>
+    </div>
+  </div>
+</div>
+<div id="toast" role="status"></div>
+
+<script src="config.js"></script>
+<script>
+/* ================================================================
+   1) CATÁLOGOS
+   Edita esta lista, o crea un archivo "catalogo.json" junto a este
+   index.html con el mismo formato y reemplazará a esta lista.
+   - swf:   ruta o URL del archivo .swf (debe estar en tu mismo sitio
+            o en un servidor que permita CORS)
+   - icon:  emoji que se muestra si no hay miniatura
+   - thumb: (opcional) ruta de una imagen de miniatura
+   ================================================================ */
+let CATALOGS = [
+  { id: "accion", name: "Acción", games: [
+    { title: "Bubble Trouble", swf: "GAMES/bubbletrouble.swf", icon: "🫧" }
+  ]},
+  { id: "estrategia", name: "Estrategia", games: [
+    { title: "Zombie Trailer Park", swf: "GAMES/zombie-trailer-park.swf", icon: "🧟" }
+  ]}
+];
+
+/* ================================================================
+   2) UTILIDADES
+   ================================================================ */
+const $ = (s) => document.querySelector(s);
+function el(tag, props, ...kids) {
+  const n = document.createElement(tag);
+  if (props) for (const k in props) {
+    if (k === "class") n.className = props[k];
+    else if (k === "style") n.setAttribute("style", props[k]);
+    else if (k.startsWith("on")) n.addEventListener(k.slice(2), props[k]);
+    else n.setAttribute(k, props[k]);
+  }
+  for (const kid of kids) if (kid != null) n.append(kid);
+  return n;
+}
+function hue(str) { let h = 0; for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) % 360; return h; }
+function gradient(title) {
+  const h = hue(title);
+  return `linear-gradient(135deg, hsl(${h} 70% 62%), hsl(${(h + 55) % 360} 72% 48%))`;
+}
+let toastTimer;
+function toast(msg) {
+  const t = $("#toast"); t.textContent = msg; t.style.display = "block";
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.style.display = "none"; }, 3200);
+}
+
+/* ================================================================
+   3) MI BIBLIOTECA (archivos SWF guardados en este dispositivo)
+   Se guardan en IndexedDB del navegador: no se suben a ningún lado.
+   ================================================================ */
+const DB_NAME = "arcade-swf", STORE = "files";
+let memoryLib = []; // respaldo si IndexedDB no está disponible
+function openDB() {
+  return new Promise((resolve, reject) => {
+    try {
+      const r = indexedDB.open(DB_NAME, 1);
+      r.onupgradeneeded = () => r.result.createObjectStore(STORE, { keyPath: "id", autoIncrement: true });
+      r.onsuccess = () => resolve(r.result);
+      r.onerror = () => reject(r.error);
+    } catch (e) { reject(e); }
+  });
+}
+async function libAll() {
+  try {
+    const db = await openDB();
+    return await new Promise((res, rej) => {
+      const q = db.transaction(STORE).objectStore(STORE).getAll();
+      q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error);
+    });
+  } catch (e) { return memoryLib; }
+}
+async function libAdd(name, blob) {
+  try {
+    const db = await openDB();
+    await new Promise((res, rej) => {
+      const tx = db.transaction(STORE, "readwrite");
+      tx.objectStore(STORE).add({ name, blob, added: Date.now() });
+      tx.oncomplete = res; tx.onerror = () => rej(tx.error);
+    });
+  } catch (e) {
+    memoryLib.push({ id: Date.now() + Math.random(), name, blob });
+    toast("No se pudo guardar de forma permanente; el juego queda disponible solo en esta sesión.");
+  }
+}
+async function libDelete(id) {
+  try {
+    const db = await openDB();
+    await new Promise((res, rej) => {
+      const tx = db.transaction(STORE, "readwrite");
+      tx.objectStore(STORE).delete(id);
+      tx.oncomplete = res; tx.onerror = () => rej(tx.error);
+    });
+  } catch (e) { memoryLib = memoryLib.filter((f) => f.id !== id); }
+}
+
+/* ================================================================
+   4) INTERFAZ DE CATÁLOGOS
+   ================================================================ */
+const state = { cat: "todos", q: "", lib: [] };
+
+function renderChips() {
+  const box = $("#chips"); box.replaceChildren();
+  const items = [{ id: "todos", name: "Todos" }, ...CATALOGS, { id: "mi", name: "Mi biblioteca" }];
+  for (const c of items) {
+    box.append(el("button", {
+      class: "chip", type: "button", "aria-pressed": String(state.cat === c.id),
+      onclick: () => { state.cat = c.id; renderChips(); renderMain(); window.scrollTo({ top: 0 }); }
+    }, c.name));
+  }
+}
+
+function tile(game, opts = {}) {
+  const art = el("div", { class: "art", style: `background-image:${game.thumb ? `url('${game.thumb.replace(/'/g, "%27")}'),` : ""}${gradient(game.title)}` }, game.thumb ? "" : (game.icon || "🎮"));
+  const play = el("button", { class: "play", type: "button", "aria-label": "Jugar " + game.title, onclick: () => openGame(game) },
+    art, el("div", { class: "meta" }, el("b", null, game.title), el("small", null, opts.sub || "")));
+  const t = el("div", { class: "tile" }, play);
+  if (opts.onDelete) t.append(el("button", { class: "del", type: "button", "aria-label": "Quitar " + game.title, onclick: opts.onDelete }, "×"));
+  return t;
+}
+
+function renderMain() {
+  const main = $("#main"); main.replaceChildren();
+  const q = state.q.trim().toLowerCase();
+  const match = (g) => !q || g.title.toLowerCase().includes(q);
+  let shown = 0;
+
+  if (state.cat !== "mi") {
+    for (const c of CATALOGS) {
+      if (state.cat !== "todos" && state.cat !== c.id) continue;
+      const games = c.games.filter(match);
+      if (!games.length) continue;
+      shown += games.length;
+      main.append(el("section", null,
+        el("div", { class: "sec-head" }, el("h2", null, c.name), el("span", null, games.length + (games.length === 1 ? " juego" : " juegos"))),
+        el("div", { class: "grid" }, ...games.map((g) => tile(g, { sub: c.name })))));
+    }
+  }
+
+  if (state.cat === "mi" || state.cat === "todos") {
+    const files = state.lib.filter((f) => match({ title: f.name.replace(/\.swf$/i, "") }));
+    if (files.length || state.cat === "mi") {
+      shown += files.length;
+      const sec = el("section", null, el("div", { class: "sec-head" }, el("h2", null, "Mi biblioteca"), el("span", null, files.length + (files.length === 1 ? " juego" : " juegos"))));
+      if (files.length) {
+        sec.append(el("div", { class: "grid" }, ...files.map((f) => {
+          const title = f.name.replace(/\.swf$/i, "");
+          return tile({ title, icon: "📁", blob: f.blob }, { sub: "En este dispositivo", onDelete: async () => { await libDelete(f.id); state.lib = await libAll(); renderMain(); } });
+        })));
+      } else {
+        sec.append(el("div", { class: "empty" }, "Aquí van los archivos .swf que agregues desde tu iPhone. Se guardan solo en este dispositivo.",
+          el("br"), el("button", { type: "button", onclick: () => $("#file").click() }, "Agregar SWF")));
+      }
+      main.append(sec);
+    }
+  }
+  if (!shown && state.cat !== "mi") main.append(el("div", { class: "empty" }, q ? "No hay juegos que coincidan con “" + state.q + "”." : "Este catálogo todavía no tiene juegos."));
+}
+
+/* ================================================================
+   5) REPRODUCTOR (Ruffle: emulador de Flash en WebAssembly)
+   ================================================================ */
+let current = null, ruffleEl = null, objectUrl = null;
+const multiplayer = {
+  socket: null, token: null, code: null, seat: null,
+  ready: false, started: false, localKeys: new Set(), remoteKeys: new Set()
+};
+const touchPointers = new Map();
+const touchKeyCounts = new Map();
+
+async function mountPlayer(game) {
+  const stage = $("#stage");
+  if (ruffleEl) { try { ruffleEl.remove(); } catch (e) {} ruffleEl = null; }
+  if (!window.RufflePlayer) { toast("Ruffle no se pudo cargar. Revisa tu conexión."); return; }
+  const ruffle = window.RufflePlayer.newest();
+  ruffleEl = ruffle.createPlayer();
+  stage.prepend(ruffleEl);
+  const cfg = { autoplay: "on", unmuteOverlay: "hidden", backgroundColor: "#000000", letterbox: "on", scale: "showAll", forceScale: true, forceAlign: true, salign: "C", quality: game.title === "Zombie Trailer Park" ? "medium" : "high", splashScreen: false, contextMenu: "off", warnOnUnsupportedContent: false };
+  try {
+    if (game.blob) {
+      const buf = new Uint8Array(await game.blob.arrayBuffer());
+      ruffleEl.load({ data: buf, ...cfg });
+    } else {
+      ruffleEl.load({ url: game.swf, ...cfg });
+    }
+  } catch (e) { toast("No se pudo abrir este juego."); }
+}
+
+function openGame(game) {
+  current = game;
+  $("#ptitle").textContent = game.title;
+  $("#player").classList.add("open");
+  $("#player").classList.remove("hide-bar");
+  $("#touchControls").classList.toggle("active", game.title === "Bubble Trouble");
+  document.body.classList.add("locked");
+  mountPlayer(game);
+}
+function closeGame() {
+  $("#player").classList.remove("open");
+  $("#touchControls").classList.remove("active");
+  document.body.classList.remove("locked");
+  if (ruffleEl) { try { ruffleEl.remove(); } catch (e) {} ruffleEl = null; }
+  if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
+  current = null;
+  leaveMultiplayer();
+}
+$("#closeBtn").addEventListener("click", closeGame);
+$("#reloadBtn").addEventListener("click", () => { if (current) mountPlayer(current); });
+$("#reveal").addEventListener("click", () => $("#player").classList.remove("hide-bar"));
+$("#fsBtn").addEventListener("click", () => {
+  const p = $("#player");
+  // iPhone no permite la API de pantalla completa en páginas: se oculta la barra para usar todo el espacio.
+  if (p.requestFullscreen && !document.fullscreenElement) {
+    p.requestFullscreen().then(() => p.classList.add("hide-bar")).catch(() => p.classList.add("hide-bar"));
+  } else {
+    p.classList.add("hide-bar");
+    toast("Para pantalla completa real en iPhone: Compartir → Agregar a pantalla de inicio.");
+  }
+});
+document.addEventListener("fullscreenchange", () => { if (!document.fullscreenElement) $("#player").classList.remove("hide-bar"); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && current) closeGame(); });
+
+function showLobby() { $("#lobby").classList.add("open"); }
+function hideLobby() { $("#lobby").classList.remove("open"); }
+function lobbyStatus(text) { $("#lobbyStatus").textContent = text; }
+function resetLobbyUI() {
+  $("#roomCode").hidden = true;
+  $("#roomCode").textContent = "";
+  $("#roomInput").hidden = false;
+  $("#roomInput").value = "";
+  $("#createRoom").hidden = false;
+  $("#joinRoom").hidden = false;
+  $("#copyRoom").hidden = true;
+  $("#startMatch").hidden = true;
+  $("#startMatch").disabled = true;
+}
+function updateRoomStatus(connectedPlayers) {
+  multiplayer.ready = connectedPlayers === 2;
+  lobbyStatus(connectedPlayers === 2 ? "Los dos jugadores están conectados." : "Sala creada. Esperando al segundo jugador...");
+  $("#startMatch").hidden = multiplayer.seat !== 1;
+  $("#startMatch").disabled = !multiplayer.ready;
+  $("#startMatch").textContent = multiplayer.ready ? "Comenzar partida" : "Esperando al otro jugador";
+}
+async function requestRoom(path, body) {
+  const configuredServer = (window.ARCADE_MULTIPLAYER_SERVER || "").trim().replace(/\/+$/, "");
+  const isLocal = ["localhost", "127.0.0.1", "::1"].includes(location.hostname);
+  const serverUrl = configuredServer || (isLocal ? location.origin : "");
+  if (!serverUrl) {
+    throw new Error("Falta configurar ARCADE_MULTIPLAYER_SERVER en Netlify con la URL HTTPS de tu servidor de Render.");
+  }
+  const response = await fetch(`${serverUrl}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body || {})
+  });
+  const responseBody = await response.text();
+  let result;
+  try {
+    result = responseBody ? JSON.parse(responseBody) : null;
+  } catch {
+    if (response.status === 404) {
+      throw new Error(`El servidor ${serverUrl} respondió 404. Comprueba que la URL sea la del servicio de Render y que Render haya desplegado server.js.`);
+    }
+    throw new Error(
+      response.ok
+        ? "El servidor online respondió con datos inválidos. Revisa la configuración y vuelve a intentar."
+        : `El servidor online no está listo o respondió con un error (HTTP ${response.status}). Espera un momento y vuelve a intentar.`
+    );
+  }
+  if (!result || typeof result !== "object") {
+    if (response.status === 404) {
+      throw new Error(`El servidor ${serverUrl} respondió 404. Comprueba que la URL sea la del servicio de Render y que Render haya desplegado server.js.`);
+    }
+    throw new Error(
+      response.ok
+        ? "El servidor online devolvió una respuesta vacía. Revisa que el backend esté activo."
+        : `El servidor online no respondió correctamente (HTTP ${response.status}). Espera un momento y vuelve a intentar.`
+    );
+  }
+  if (!response.ok) throw new Error(result.error || "No se pudo crear o abrir la sala.");
+  return result;
+}
+function connectRoom({ code, token, seat }) {
+  multiplayer.socket?.close();
+  multiplayer.code = code;
+  multiplayer.token = token;
+  multiplayer.seat = seat;
+  multiplayer.ready = false;
+  multiplayer.started = false;
+  $("#roomCode").textContent = code;
+  $("#roomCode").hidden = false;
+  $("#roomInput").hidden = true;
+  $("#createRoom").hidden = true;
+  $("#joinRoom").hidden = true;
+  $("#copyRoom").hidden = false;
+  $("#startMatch").hidden = seat !== 1;
+  lobbyStatus("Conectando a la sala...");
+  const serverUrl = new URL(window.ARCADE_MULTIPLAYER_SERVER || location.origin);
+  const protocol = serverUrl.protocol === "https:" ? "wss:" : "ws:";
+  const socket = new WebSocket(`${protocol}//${serverUrl.host}/ws?room=${encodeURIComponent(code)}&token=${encodeURIComponent(token)}`);
+  multiplayer.socket = socket;
+  socket.addEventListener("open", () => lobbyStatus("Conectado. Esperando al otro jugador..."));
+  socket.addEventListener("message", (event) => {
+    let message;
+    try { message = JSON.parse(event.data); } catch { return; }
+    if (message.type === "status") updateRoomStatus(message.connectedPlayers);
+    if (message.type === "input") deliverKey(message.keyCode, message.down, multiplayer.remoteKeys);
+    if (message.type === "start") {
+      multiplayer.started = true;
+      const game = CATALOGS.flatMap((catalog) => catalog.games).find((item) => item.title === "Bubble Trouble");
+      if (!game) { lobbyStatus("No se encontró Bubble Trouble en el catálogo."); return; }
+      hideLobby();
+      openGame(game);
+    }
+    if (message.type === "error") lobbyStatus(message.message || "Error de conexión en la sala.");
+  });
+  socket.addEventListener("close", () => {
+    if (multiplayer.socket !== socket) return;
+    multiplayer.socket = null;
+    releaseKeys(multiplayer.localKeys);
+    releaseKeys(multiplayer.remoteKeys);
+    if (multiplayer.code) lobbyStatus("Se perdió la conexión con la sala.");
+  });
+  socket.addEventListener("error", () => lobbyStatus("No se pudo conectar. Verifica que el servidor esté publicado con HTTPS."));
+}
+function deliverKey(keyCode, down, held) {
+  if (down === held.has(keyCode)) return;
+  if (down) held.add(keyCode); else held.delete(keyCode);
+  const names = { 32: [" ", "Space"], 37: ["ArrowLeft", "ArrowLeft"], 39: ["ArrowRight", "ArrowRight"], 67: ["c", "KeyC"], 87: ["w", "KeyW"], 88: ["x", "KeyX"] };
+  const [key, code] = names[keyCode] || ["", ""];
+  const event = new KeyboardEvent(down ? "keydown" : "keyup", {
+    key, code, bubbles: true, cancelable: true, repeat: false, keyCode, which: keyCode
+  });
+  try { Object.defineProperty(event, "keyCode", { get: () => keyCode }); } catch {}
+  try { Object.defineProperty(event, "which", { get: () => keyCode }); } catch {}
+  const target = ruffleEl || document;
+  if (ruffleEl) ruffleEl.focus();
+  target.dispatchEvent(event);
+}
+function releaseKeys(held) {
+  for (const keyCode of [...held]) deliverKey(keyCode, false, held);
+}
+function sendPlayerKey(keyCode, down) {
+  const socket = multiplayer.socket;
+  if (down === multiplayer.localKeys.has(keyCode)) return;
+  deliverKey(keyCode, down, multiplayer.localKeys);
+  if (multiplayer.started && socket?.readyState === WebSocket.OPEN) {
+    socket.send(JSON.stringify({ type: "input", keyCode, down }));
+  }
+}
+function leaveMultiplayer() {
+  releaseKeys(multiplayer.localKeys);
+  releaseKeys(multiplayer.remoteKeys);
+  multiplayer.code = null;
+  multiplayer.token = null;
+  multiplayer.seat = null;
+  multiplayer.ready = false;
+  multiplayer.started = false;
+  if (multiplayer.socket) {
+    const socket = multiplayer.socket;
+    multiplayer.socket = null;
+    socket.close();
+  }
+  resetLobbyUI();
+}
+
+$("#onlineBtn").addEventListener("click", () => {
+  showLobby();
+  lobbyStatus("Crea una sala o ingresa el código de tu amigo.");
+});
+$("#cancelLobby").addEventListener("click", () => { hideLobby(); leaveMultiplayer(); });
+$("#createRoom").addEventListener("click", async () => {
+  try {
+    const room = await requestRoom("/api/rooms");
+    connectRoom(room);
+  } catch (error) {
+    lobbyStatus(error instanceof TypeError ? "No se alcanzó el servidor online. Despliega este proyecto en Node y abre la web desde su HTTPS." : error.message);
+  }
+});
+$("#joinRoom").addEventListener("click", async () => {
+  const code = $("#roomInput").value.trim().toUpperCase();
+  if (!code) { lobbyStatus("Escribe el código de sala."); return; }
+  try {
+    const room = await requestRoom("/api/rooms/join", { code });
+    connectRoom(room);
+  } catch (error) {
+    lobbyStatus(error instanceof TypeError ? "No se alcanzó el servidor online. Despliega este proyecto en Node y abre la web desde su HTTPS." : error.message);
+  }
+});
+$("#startMatch").addEventListener("click", () => {
+  if (!multiplayer.ready || multiplayer.socket?.readyState !== WebSocket.OPEN) return;
+  multiplayer.socket.send(JSON.stringify({ type: "start" }));
+});
+$("#copyRoom").addEventListener("click", async () => {
+  const invite = new URL(location.href);
+  invite.searchParams.set("room", multiplayer.code);
+  try {
+    await navigator.clipboard.writeText(invite.href);
+    lobbyStatus("Invitación copiada. Envíala al otro jugador.");
+  } catch (error) {
+    lobbyStatus("Código de sala: " + multiplayer.code);
+  }
+});
+$("#roomInput").addEventListener("input", (event) => {
+  event.target.value = event.target.value.replace(/[^a-z0-9]/gi, "").toUpperCase();
+});
+$("#touchControls").addEventListener("pointerdown", (event) => {
+  const button = event.target.closest(".touch-key");
+  if (!button || !current || current.title !== "Bubble Trouble") return;
+  event.preventDefault();
+  if (touchPointers.has(event.pointerId)) return;
+  const player = multiplayer.started && multiplayer.seat === 2 ? 2 : 1;
+  const keyCode = Number(button.dataset[`player${player}`]);
+  touchPointers.set(event.pointerId, { button, keyCode });
+  button.classList.add("pressed");
+  const count = touchKeyCounts.get(keyCode) || 0;
+  touchKeyCounts.set(keyCode, count + 1);
+  if (!count) sendPlayerKey(keyCode, true);
+});
+$("#touchControls").addEventListener("contextmenu", (event) => event.preventDefault());
+$("#touchControls").addEventListener("selectstart", (event) => event.preventDefault());
+function releaseTouchPointer(pointerId) {
+  const touch = touchPointers.get(pointerId);
+  if (!touch) return;
+  touchPointers.delete(pointerId);
+  if (![...touchPointers.values()].some((active) => active.button === touch.button)) {
+    touch.button.classList.remove("pressed");
+  }
+  const count = touchKeyCounts.get(touch.keyCode) || 0;
+  if (count <= 1) {
+    touchKeyCounts.delete(touch.keyCode);
+    sendPlayerKey(touch.keyCode, false);
+  } else {
+    touchKeyCounts.set(touch.keyCode, count - 1);
+  }
+}
+document.addEventListener("pointerup", (event) => releaseTouchPointer(event.pointerId));
+document.addEventListener("pointercancel", (event) => releaseTouchPointer(event.pointerId));
+document.addEventListener("keydown", (event) => {
+  if (current?.title === "Bubble Trouble" && ["ArrowLeft", "ArrowRight", " "].includes(event.key)) {
+    event.preventDefault();
+  }
+}, true);
+function releaseTouchPointers() {
+  for (const pointerId of [...touchPointers.keys()]) releaseTouchPointer(pointerId);
+}
+window.addEventListener("blur", () => {
+  releaseTouchPointers();
+  releaseKeys(multiplayer.localKeys);
+});
+const inviteCode = new URLSearchParams(location.search).get("room");
+if (inviteCode) {
+  $("#roomInput").value = inviteCode.replace(/[^a-z0-9]/gi, "").toUpperCase();
+  showLobby();
+}
+
+/* ================================================================
+   6) AGREGAR ARCHIVOS Y BÚSQUEDA
+   ================================================================ */
+$("#addBtn").addEventListener("click", () => $("#file").click());
+$("#file").addEventListener("change", async (e) => {
+  const files = [...e.target.files]; let added = 0;
+  for (const f of files) {
+    if (!/\.swf$/i.test(f.name)) continue;
+    await libAdd(f.name, f); added++;
+  }
+  e.target.value = "";
+  if (!added && files.length) { toast("Solo se pueden agregar archivos .swf"); return; }
+  state.lib = await libAll(); state.cat = "mi"; renderChips(); renderMain();
+  if (added) toast(added === 1 ? "Juego agregado a Mi biblioteca" : added + " juegos agregados a Mi biblioteca");
+});
+$("#q").addEventListener("input", (e) => { state.q = e.target.value; renderMain(); });
+
+/* ================================================================
+   7) INICIO
+   ================================================================ */
+(async function init() {
+  try {
+    const r = await fetch("catalogo.json", { cache: "no-cache" });
+    if (r.ok) { const data = await r.json(); if (Array.isArray(data) && data.length) CATALOGS = data; }
+  } catch (e) { /* se usa la lista incluida arriba */ }
+  state.lib = await libAll();
+  renderChips(); renderMain();
+})();
+</script>
+
+<!-- Ruffle: emulador de Flash. Si prefieres no depender de un CDN, descarga Ruffle (versión "self-hosted") y cambia esta ruta. -->
+<script src="https://unpkg.com/@ruffle-rs/ruffle" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/@ruffle-rs/ruffle'"></script>
+</body>
+</html>
