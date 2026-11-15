@@ -21,8 +21,6 @@ const gamesOutput = path.join(output, "GAMES");
 fs.mkdirSync(gamesOutput, { recursive: true });
 const gameFiles = [
   "Bad_Ice_Cream.swf",
-  "Bad_Ice_Cream_2.swf",
-  "Bad_Ice_Cream_3.swf",
   "bubbletrouble.swf",
   "zombie-trailer-park.swf"
 ];

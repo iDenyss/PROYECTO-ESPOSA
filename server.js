@@ -23,14 +23,12 @@ const allowedKeys = {
     2: new Set([65, 68, 70, 83, 87])
   }
 };
-const gameIds = new Set(["bubble-trouble", "bad-ice-cream-1", "bad-ice-cream-2", "bad-ice-cream-3"]);
+const gameIds = new Set(["bubble-trouble", "bad-ice-cream-1"]);
 const staticFiles = new Map([
   ["/", ["index.html", "text/html; charset=utf-8"]],
   ["/index.html", ["index.html", "text/html; charset=utf-8"]],
   ["/config.js", ["config.js", "text/javascript; charset=utf-8"]],
   ["/GAMES/Bad_Ice_Cream.swf", ["GAMES/Bad_Ice_Cream.swf", "application/x-shockwave-flash"]],
-  ["/GAMES/Bad_Ice_Cream_2.swf", ["GAMES/Bad_Ice_Cream_2.swf", "application/x-shockwave-flash"]],
-  ["/GAMES/Bad_Ice_Cream_3.swf", ["GAMES/Bad_Ice_Cream_3.swf", "application/x-shockwave-flash"]],
   ["/GAMES/bubbletrouble.swf", ["GAMES/bubbletrouble.swf", "application/x-shockwave-flash"]],
   ["/GAMES/zombie-trailer-park.swf", ["GAMES/zombie-trailer-park.swf", "application/x-shockwave-flash"]]
 ]);

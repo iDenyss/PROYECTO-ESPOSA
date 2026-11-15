@@ -11,7 +11,7 @@ Netlify aloja la aplicación React compilada y los SWF de `GAMES/` como archivos
 5. Si Render asignó una URL diferente, configura en Netlify **Site configuration → Environment variables** con `ARCADE_MULTIPLAYER_SERVER` y esa URL HTTPS. Vuelve a desplegar Netlify.
 6. Despliega Netlify después de desplegar Render y abre la URL de Netlify en ambos iPhone. Un jugador crea la sala, comparte el código o la invitación y el otro se une.
 
-El catálogo incluye Bubble Trouble, Zombie Trailer Park y Bad Ice Cream 1, 2 y 3. Cada Bad Ice Cream tiene el botón **Jugar online** en su ficha. Bad Ice Cream usa controles táctiles en horizontal: joystick (flechas para el anfitrión, WASD para el segundo jugador) y botón de acción (espacio para el anfitrión, F para el segundo jugador). Los controles de Bubble Trouble se colocan por encima de la insignia flotante de Netlify en móviles.
+El catálogo incluye Bubble Trouble, Zombie Trailer Park y Bad Ice Cream. Bad Ice Cream tiene el botón **Jugar online** en su ficha y usa controles táctiles en horizontal: joystick (flechas para el anfitrión, WASD para el segundo jugador) y botón de acción (espacio para el anfitrión, F para el segundo jugador). Los controles de Bubble Trouble se colocan por encima de la insignia flotante de Netlify en móviles.
 
 La URL predeterminada de Render se inserta en `config.js` durante la compilación de Netlify. Si cambias de URL de Netlify, actualiza `ALLOWED_ORIGINS` en Render; si cambia la URL de Render, configura `ARCADE_MULTIPLAYER_SERVER` en Netlify y vuelve a desplegar.
 

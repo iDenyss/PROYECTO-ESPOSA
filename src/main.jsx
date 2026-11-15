@@ -5,9 +5,7 @@ import "./styles.css";
 const INITIAL_CATALOGS = [
   { id: "accion", name: "Acción", games: [
     { id: "bubble-trouble", title: "Bubble Trouble", swf: "GAMES/bubbletrouble.swf", icon: "🫧", orientation: "portrait" },
-    { id: "bad-ice-cream-1", title: "Bad Ice Cream", swf: "GAMES/Bad_Ice_Cream.swf", icon: "🍦", orientation: "landscape", controls: "icecream" },
-    { id: "bad-ice-cream-2", title: "Bad Ice Cream 2", swf: "GAMES/Bad_Ice_Cream_2.swf", icon: "🍦", orientation: "landscape", controls: "icecream" },
-    { id: "bad-ice-cream-3", title: "Bad Ice Cream 3", swf: "GAMES/Bad_Ice_Cream_3.swf", icon: "🍦", orientation: "landscape", controls: "icecream" }
+    { id: "bad-ice-cream-1", title: "Bad Ice Cream", swf: "GAMES/Bad_Ice_Cream.swf", icon: "🍦", orientation: "landscape", controls: "icecream" }
   ]},
   { id: "estrategia", name: "Estrategia", games: [
     { id: "zombie-trailer-park", title: "Zombie Trailer Park", swf: "GAMES/zombie-trailer-park.swf", icon: "🧟", orientation: "landscape" }
