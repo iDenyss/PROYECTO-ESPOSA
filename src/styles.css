@@ -411,26 +411,126 @@ section { margin-bottom: 34px; animation: section-in .55s both; }
   border-radius: 10px;
   box-shadow: 0 0 34px rgba(19,87,255,.22);
 }
-#player.portrait-dpad-game #stage {
-  flex: 1 1 0;
-  min-height: 0;
-  margin-bottom: 0;
+.pacman-arcade-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #050508;
 }
-#player.portrait-dpad-game .landscape-controls {
+#player.game-with-dpad .landscape-controls {
   position: relative;
   inset: auto;
-  flex: 0 0 clamp(176px, 26dvh, 220px);
-  display: grid;
-  place-items: center;
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  flex: 0 0 clamp(118px, 32vmin, 152px);
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  gap: 12px;
+  padding: 6px max(14px, env(safe-area-inset-right, 0px)) 6px max(14px, env(safe-area-inset-left, 0px));
   background: radial-gradient(ellipse at 50% 20%, rgba(52,86,170,.28), rgba(5,8,20,.96) 75%);
+  pointer-events: auto;
 }
-#player.portrait-dpad-game .mobile-dpad {
+#player.game-with-dpad .mobile-dpad {
   position: static;
   left: auto;
   bottom: auto;
-  grid-template-columns: repeat(3, clamp(46px, 14vw, 64px));
-  grid-template-rows: repeat(3, clamp(46px, 14vw, 64px));
+  grid-template-columns: repeat(3, clamp(34px, 10vmin, 48px));
+  grid-template-rows: repeat(3, clamp(34px, 10vmin, 48px));
+  flex: none;
+}
+#player.game-with-dpad .action-button {
+  position: static;
+  right: auto;
+  bottom: auto;
+  width: clamp(58px, 15vmin, 82px);
+  height: clamp(58px, 15vmin, 82px);
+  flex: none;
+}
+#player.portrait-only-game .hardest-controls {
+  display: flex;
+  flex: 0 0 clamp(170px, 29dvh, 280px);
+  align-items: center;
+  justify-content: space-between;
+  gap: clamp(18px, 8vw, 64px);
+  padding: 14px clamp(16px, 8vw, 64px) calc(14px + env(safe-area-inset-bottom, 0px));
+  border-top: 8px solid #080b14;
+  background: #9eafbf;
+}
+.hardest-pad {
+  --pad-size: clamp(44px, 10vmin, 76px);
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+  border: 4px solid #56617d;
+  border-radius: 20px;
+  background: linear-gradient(145deg, #1d2744, #10182e);
+  box-shadow: 0 5px 0 #6e7c91, inset 0 2px 6px rgba(255,255,255,.16), 0 0 5px #e0e5ef;
+}
+.hardest-pad-vertical {
+  grid-template-columns: var(--pad-size);
+  grid-template-rows: repeat(3, var(--pad-size));
+}
+.hardest-pad-horizontal {
+  grid-template-columns: repeat(3, var(--pad-size));
+  grid-template-rows: var(--pad-size);
+}
+.hardest-pad .touch-key,
+.hardest-pad-center {
+  display: grid;
+  width: var(--pad-size);
+  height: var(--pad-size);
+  place-items: center;
+  border: 2px solid #56627f;
+  border-radius: 14px;
+  background: linear-gradient(145deg, #1a2442, #111a32);
+  color: #8395b8;
+  font-size: clamp(1.15rem, 5vmin, 2rem);
+  font-weight: 900;
+  text-shadow: 0 1px 2px #050914;
+  box-shadow: 0 4px 0 #070c1b, inset 0 2px 5px rgba(255,255,255,.12);
+  touch-action: none;
+}
+.hardest-pad-center {
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 30%, #283354, #11182f 72%);
+}
+#orientationNotice {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  place-items: center;
+  padding: 24px;
+  background: #080b14;
+  color: #fff;
+  text-align: center;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+#player.game-with-touch-controls .touch-controls {
+  display: grid;
+  position: relative;
+  inset: auto;
+  flex: 0 0 clamp(78px, 17vmin, 100px);
+  align-items: center;
+  bottom: auto;
+  left: auto;
+  right: auto;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+#player.game-with-touch-controls .touch-group {
+  gap: clamp(10px, 3vw, 22px);
+}
+#player.game-with-touch-controls .touch-key {
+  width: clamp(48px, 12vmin, 68px);
+  height: clamp(48px, 12vmin, 68px);
+}
+#player.game-with-touch-controls .touch-key.fire {
+  width: clamp(54px, 14vmin, 76px);
+  height: clamp(54px, 14vmin, 76px);
+}
+#player.game-with-touch-controls #stage {
+  margin-bottom: 0;
 }
 .pacman-controls {
   display: grid;
@@ -482,22 +582,6 @@ section { margin-bottom: 34px; animation: section-in .55s both; }
   text-align: center;
 }
 #player.online-game #reloadBtn { display: none; }
-#player.portrait-game #stage { margin-bottom: clamp(150px, 20dvh, 190px); }
-#player.portrait-dpad-game #stage { margin-bottom: 0; }
-#orientationNotice {
-  display: none;
-  position: fixed;
-  inset: 0;
-  z-index: 120;
-  place-items: center;
-  padding: 24px;
-  background: #000;
-  color: #fff;
-  text-align: center;
-  font-size: 1.2rem;
-  font-weight: 700;
-}
-#player.landscape-game #orientationNotice { display: none; }
 .touch-controls {
   position: fixed;
   z-index: 105;
@@ -605,15 +689,9 @@ section { margin-bottom: 34px; animation: section-in .55s both; }
   font-size: .92rem;
 }
 @media (orientation: landscape) and (max-width: 900px) {
-  #player.portrait-game #orientationNotice { display: grid; }
-  #player.portrait-game .touch-controls { display: none; }
-  #player.portrait-game .landscape-controls { display: none; }
-  #player.portrait-game #stage { visibility: hidden; }
-}
-@media (orientation: portrait) and (max-width: 900px) {
-  #player.landscape-game #orientationNotice { display: grid; }
-  #player.landscape-game .landscape-controls { display: none; }
-  #player.landscape-game #stage { visibility: hidden; }
+  #player.portrait-only-game #stage,
+  #player.portrait-only-game .hardest-controls { display: none; }
+  #player.portrait-only-game #orientationNotice { display: grid; }
 }
 @media (max-height: 460px) {
   .bar { min-height: calc(40px + env(safe-area-inset-top, 0px)); }

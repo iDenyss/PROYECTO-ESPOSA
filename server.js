@@ -40,6 +40,7 @@ const staticFiles = new Map([
   ["/", ["index.html", "text/html; charset=utf-8"]],
   ["/index.html", ["index.html", "text/html; charset=utf-8"]],
   ["/config.js", ["config.js", "text/javascript; charset=utf-8"]],
+  ["/pacman-arcade.html", ["public/pacman-arcade.html", "text/html; charset=utf-8"]],
   ["/GAMES/Bad_Ice_Cream.swf", ["GAMES/Bad_Ice_Cream.swf", "application/x-shockwave-flash"]],
   ["/GAMES/age_of_war.swf", ["GAMES/age_of_war.swf", "application/x-shockwave-flash"]],
   ["/GAMES/bloons-tower-defence-4.swf", ["GAMES/bloons-tower-defence-4.swf", "application/x-shockwave-flash"]],

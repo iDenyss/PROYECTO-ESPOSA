@@ -1,21 +1,20 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import PacmanGame from "./PacmanGame";
 import "./styles.css";
 
 const INITIAL_CATALOGS = [
   { id: "accion", name: "Acción", games: [
-    { id: "bubble-trouble", title: "Bubble Trouble", swf: "GAMES/bubbletrouble.swf", icon: "🫧", thumb: "/images/bubble-trouble.jpg", orientation: "portrait" },
-    { id: "bad-ice-cream-1", title: "Bad Ice Cream", swf: "GAMES/Bad_Ice_Cream.swf", icon: "🍦", thumb: "/images/bad-ice-cream.jpg", orientation: "landscape", controls: "icecream" },
-    { id: "age-of-war", title: "Age of War", swf: "GAMES/age_of_war.swf", icon: "⚔️", thumb: "/images/age-of-war.jpg", orientation: "landscape" }
+    { id: "bubble-trouble", title: "Bubble Trouble", swf: "GAMES/bubbletrouble.swf", icon: "🫧", thumb: "/images/bubble-trouble.jpg" },
+    { id: "bad-ice-cream-1", title: "Bad Ice Cream", swf: "GAMES/Bad_Ice_Cream.swf", icon: "🍦", thumb: "/images/bad-ice-cream.jpg", controls: "icecream" },
+    { id: "age-of-war", title: "Age of War", swf: "GAMES/age_of_war.swf", icon: "⚔️", thumb: "/images/age-of-war.jpg" }
   ]},
   { id: "estrategia", name: "Estrategia", games: [
-    { id: "zombie-trailer-park", title: "Zombie Trailer Park", swf: "GAMES/zombie-trailer-park.swf", icon: "🧟", thumb: "/images/zombie.jpg", orientation: "landscape" },
-    { id: "bloons-tower-defence-4", title: "Bloons Tower Defense 4", swf: "GAMES/bloons-tower-defence-4.swf", icon: "🎈", thumb: "/images/bloons-tower.jpg", orientation: "landscape" }
+    { id: "zombie-trailer-park", title: "Zombie Trailer Park", swf: "GAMES/zombie-trailer-park.swf", icon: "🧟", thumb: "/images/zombie.jpg" },
+    { id: "bloons-tower-defence-4", title: "Bloons Tower Defense 4", swf: "GAMES/bloons-tower-defence-4.swf", icon: "🎈", thumb: "/images/bloons-tower.jpg" }
   ]},
   { id: "arcade", name: "Arcade", games: [
-    { id: "pacman-multiplayer", title: "Pac-Man", icon: "🟡", thumb: "/images/pacman.jpg", multiplayerOnly: true, soloPlayable: true },
-    { id: "worlds-hardest-game", title: "The World's Hardest Game", swf: "GAMES/the-world's-hardest-game.swf", icon: "🟥", thumb: "/images/hard-game.jpg", orientation: "portrait", controls: "dpad" }
+    { id: "pacman-multiplayer", title: "Pac-Man", icon: "🟡", thumb: "/images/pacman.jpg" },
+    { id: "worlds-hardest-game", title: "The World's Hardest Game", swf: "GAMES/the-world's-hardest-game.swf", icon: "🟥", thumb: "/images/hard-game.jpg", controls: "dpad" }
   ]}
 ];
 
@@ -66,13 +65,13 @@ function App() {
   const [roomInput, setRoomInput] = useState("");
   const [roomReady, setRoomReady] = useState(false);
   const [playerSeat, setPlayerSeat] = useState(null);
-  const [pacmanState, setPacmanState] = useState(null);
   const [onlineStarted, setOnlineStarted] = useState(false);
   const [remoteView, setRemoteView] = useState(false);
   const [hideBar, setHideBar] = useState(false);
   const stageRef = useRef(null);
   const ruffleRef = useRef(null);
   const remoteVideoRef = useRef(null);
+  const pacmanFrameRef = useRef(null);
   const socketRef = useRef(null);
   const peerRef = useRef(null);
   const streamRef = useRef(null);
@@ -113,13 +112,19 @@ function App() {
     if (down) heldKeys.add(keyCode);
     else heldKeys.delete(keyCode);
     const [key, code] = KEY_INFO[keyCode] || ["", ""];
-    const event = new KeyboardEvent(down ? "keydown" : "keyup", {
+    const pacmanWindow = activeGameRef.current?.id === "pacman-multiplayer"
+      ? pacmanFrameRef.current?.contentWindow
+      : null;
+    const KeyboardEventConstructor = pacmanWindow?.KeyboardEvent || window.KeyboardEvent;
+    const event = new KeyboardEventConstructor(down ? "keydown" : "keyup", {
       key, code, bubbles: true, cancelable: true, repeat: false, keyCode, which: keyCode
     });
     try { Object.defineProperty(event, "keyCode", { get: () => keyCode }); } catch {}
     try { Object.defineProperty(event, "which", { get: () => keyCode }); } catch {}
     const player = ruffleRef.current;
-    if (player) {
+    if (pacmanWindow) {
+      pacmanWindow.dispatchEvent(event);
+    } else if (player) {
       player.focus();
       player.dispatchEvent(event);
     } else {
@@ -220,7 +225,6 @@ function App() {
           showToast("El otro jugador se desconectó.");
         }
       }
-      if (message.type === "pacman-state") setPacmanState(message.state);
       if (message.type === "input" && seat === 1) dispatchKey(message.keyCode, message.down, remoteKeysRef.current);
       if (message.type === "signal") handlePeerSignal(message.signal).catch(() => showPeerError("No se pudo conectar la transmisión entre los teléfonos."));
       if (message.type === "media-error" && seat === 2) showPeerError("El anfitrión no pudo compartir la pantalla en este dispositivo.");
@@ -229,12 +233,13 @@ function App() {
         const game = INITIAL_CATALOGS.flatMap((catalog) => catalog.games).find((item) => item.id === gameId);
         if (!game) { setLobbyStatus("El servidor indicó un juego no disponible."); return; }
         setOnlineStarted(true);
-        setRemoteView(!game.multiplayerOnly && seat === 2);
+        const streamsGame = !game.multiplayerOnly || game.id === "pacman-multiplayer";
+        setRemoteView(streamsGame && seat === 2);
         setLobbyOpen(false);
         setHideBar(false);
         setActiveGame(game);
         setLobbyGame(game);
-        if (seat === 2 && !game.multiplayerOnly) {
+        if (seat === 2 && streamsGame) {
           try { createPeerConnection(); }
           catch (error) { showPeerError(error.message); }
         }
@@ -269,7 +274,6 @@ function App() {
     setRoomReady(false);
     setOnlineStarted(false);
     setRemoteView(false);
-    setPacmanState(null);
   }, [dispatchKey]);
 
   const closeGame = useCallback(() => {
@@ -299,13 +303,6 @@ function App() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [logoOpen]);
 
-  const sendPacmanDirection = useCallback((direction) => {
-    const socket = socketRef.current;
-    if (socket?.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({ type: "pacman-input", direction }));
-    }
-  }, []);
-
   const openLobby = (game = INITIAL_CATALOGS[0].games[0]) => {
     setLobbyGame(game);
     setLobbyStatus("Crea una sala o ingresa el código de tu amigo.");
@@ -315,8 +312,21 @@ function App() {
   useEffect(() => {
     let active = true;
     let player;
-    if (!activeGame || remoteView || activeGame.multiplayerOnly) return undefined;
+    if (!activeGame || remoteView || (activeGame.multiplayerOnly && activeGame.id !== "pacman-multiplayer")) return undefined;
     const mount = async () => {
+      if (activeGame.id === "pacman-multiplayer") {
+        if (active && onlineStarted && playerSeat === 1) {
+          try {
+            await startHostStream();
+          } catch (error) {
+            if (socketRef.current?.readyState === WebSocket.OPEN) {
+              socketRef.current.send(JSON.stringify({ type: "media-error" }));
+            }
+            showPeerError(error.message || "No se pudo transmitir el juego.");
+          }
+        }
+        return;
+      }
       if (!window.RufflePlayer || !stageRef.current) {
         showToast("Ruffle no se pudo cargar. Revisa tu conexión.");
         return;
@@ -360,7 +370,9 @@ function App() {
       const deadline = Date.now() + 15000;
       let canvas;
       while (Date.now() < deadline) {
-        canvas = player?.shadowRoot?.querySelector("canvas");
+        canvas = activeGame.id === "pacman-multiplayer"
+          ? pacmanFrameRef.current?.contentDocument?.querySelector("#gameCanvas")
+          : player?.shadowRoot?.querySelector("canvas");
         if (canvas?.width && canvas?.height) break;
         await new Promise((resolve) => setTimeout(resolve, 200));
       }
@@ -504,10 +516,6 @@ function App() {
     .map((catalog) => ({ ...catalog, games: catalog.games.filter(matches) }))
     .filter((catalog) => catalog.games.length);
   const visibleCount = visibleCatalogs.reduce((count, catalog) => count + catalog.games.length, 0);
-  const portraitGame = activeGame?.orientation === "portrait" || activeGame?.title === "Bubble Trouble";
-  const landscapeGame = activeGame?.orientation === "landscape";
-  const portraitDpadGame = portraitGame && activeGame?.controls === "dpad";
-
   const releaseButton = (event) => {
     const pointerKeys = event.currentTarget.__pointerKeys;
     const code = pointerKeys?.get(event.pointerId);
@@ -532,6 +540,8 @@ function App() {
   const directionalCodes = onlineStarted && playerSeat === 2
     ? { up: 87, left: 65, down: 83, right: 68 }
     : { up: 38, left: 37, down: 40, right: 39 };
+  const hasDirectionalControls = Boolean(activeGame?.controls)
+    || (onlineStarted && playerSeat === 2 && activeGame?.id === "pacman-multiplayer");
 
   return (
     <div className="site-shell">
@@ -602,7 +612,7 @@ function App() {
             <section key={catalog.id}>
               <div className="sec-head"><h2>{catalog.name}</h2><span>{catalog.games.length} {catalog.games.length === 1 ? "juego" : "juegos"}</span></div>
               <div className="grid">
-                {catalog.games.map((game) => <GameTile key={game.id} game={game} subtitle={catalog.name} onPlay={game.multiplayerOnly && !game.soloPlayable ? () => openLobby(game) : openGame} onMultiplayer={game.multiplayerOnly || game.controls === "icecream" || game.id === "bubble-trouble" || game.title === "Bubble Trouble" ? openLobby : undefined} />)}
+                {catalog.games.map((game) => <GameTile key={game.id} game={game} subtitle={catalog.name} onPlay={game.multiplayerOnly && !game.soloPlayable ? () => openLobby(game) : openGame} onMultiplayer={game.multiplayerOnly || game.controls === "icecream" || game.id === "pacman-multiplayer" || game.id === "bubble-trouble" || game.title === "Bubble Trouble" ? openLobby : undefined} />)}
               </div>
             </section>
           ))}
@@ -614,7 +624,7 @@ function App() {
         <div className="lobby" role="dialog" aria-modal="true" aria-labelledby="lobbyTitle">
           <div className="lobby-card">
             <h2 id="lobbyTitle">{lobbyGame.title} online</h2>
-            <p>{lobbyGame.multiplayerOnly ? "Compite en tiempo real: coman puntos, eviten fantasmas y consigan la puntuación más alta." : "El anfitrión ejecuta el juego y comparte la pantalla; el segundo jugador la ve y envía sus controles."}</p>
+            <p>{lobbyGame.id === "pacman-multiplayer" ? "Jueguen juntos: el anfitrión comparte la partida y el segundo jugador también puede mover a Pac-Man." : lobbyGame.multiplayerOnly ? "Compite en tiempo real: coman puntos, eviten fantasmas y consigan la puntuación más alta." : "El anfitrión ejecuta el juego y comparte la pantalla; el segundo jugador la ve y envía sus controles."}</p>
             <p className="lobby-status" role="status">{lobbyStatus}</p>
             {roomCode ? <div className="room-code">{roomCode}</div> : (
               <input className="room-input" type="text" inputMode="text" maxLength={8} placeholder="Código de sala" aria-label="Código de sala" autoComplete="off" value={roomInput} onChange={(event) => setRoomInput(event.target.value.replace(/[^a-z0-9]/gi, "").toUpperCase())} />
@@ -637,9 +647,9 @@ function App() {
           activeGame ? "open" : "",
           onlineStarted ? "online-game" : "",
           remoteView ? "remote-view" : "",
-          portraitGame ? "portrait-game" : "",
-          landscapeGame ? "landscape-game" : "",
-          portraitDpadGame ? "portrait-dpad-game" : "",
+          activeGame.id === "worlds-hardest-game" ? "portrait-only-game" : "",
+          activeGame.title === "Bubble Trouble" ? "game-with-touch-controls" : "",
+          hasDirectionalControls ? "game-with-dpad" : "",
           hideBar ? "hide-bar" : ""
         ].filter(Boolean).join(" ")} role="dialog" aria-modal="true" aria-label="Reproductor">
           <div className="bar">
@@ -653,35 +663,50 @@ function App() {
             }}>Pantalla completa</button>
           </div>
           <div id="stage" ref={stageRef} key={reloadId}>
-            {activeGame.id === "pacman-multiplayer" && <PacmanGame state={pacmanState} playerSeat={playerSeat} solo={!onlineStarted} onDirection={sendPacmanDirection} />}
+            {activeGame.id === "pacman-multiplayer" && !remoteView && <iframe className="pacman-arcade-frame" ref={pacmanFrameRef} src="/pacman-arcade.html" title="Pac-Man clásico arcade" allow="autoplay" />}
             {remoteView && <video id="remoteScreen" ref={remoteVideoRef} autoPlay playsInline muted onPlaying={() => setLobbyStatus("")} onClick={(event) => event.currentTarget.play().catch(() => setLobbyStatus("Toca la pantalla para iniciar el video."))} />}
             {remoteView && lobbyStatus && <div className="stream-status" role="status">{lobbyStatus}</div>}
             {hideBar && <button id="reveal" type="button" aria-label="Mostrar barra" onClick={() => setHideBar(false)}>☰</button>}
           </div>
-          {(activeGame.controls === "icecream" || activeGame.controls === "dpad") && (
-            <div className="landscape-controls" aria-label="Controles táctiles">
-              <div className="mobile-dpad" aria-label="Cruceta de movimiento">
-                <span />
-                <TouchKey label="Arriba" text="▲" code={directionalCodes.up} onDown={startButton} onUp={releaseButton} />
-                <span />
-                <TouchKey label="Izquierda" text="◀" code={directionalCodes.left} onDown={startButton} onUp={releaseButton} />
-                <span />
-                <TouchKey label="Derecha" text="▶" code={directionalCodes.right} onDown={startButton} onUp={releaseButton} />
-                <span />
-                <TouchKey label="Abajo" text="▼" code={directionalCodes.down} onDown={startButton} onUp={releaseButton} />
-                <span />
+          {(activeGame.controls === "icecream" || hasDirectionalControls) && (
+            activeGame.id === "worlds-hardest-game" ? (
+              <div className="hardest-controls" aria-label="Controles de The World's Hardest Game">
+                <div className="hardest-pad hardest-pad-vertical" aria-label="Movimiento vertical">
+                  <TouchKey label="Arriba" text="▲" code={directionalCodes.up} onDown={startButton} onUp={releaseButton} />
+                  <span className="hardest-pad-center" aria-hidden="true" />
+                  <TouchKey label="Abajo" text="▼" code={directionalCodes.down} onDown={startButton} onUp={releaseButton} />
+                </div>
+                <div className="hardest-pad hardest-pad-horizontal" aria-label="Movimiento horizontal">
+                  <TouchKey label="Izquierda" text="◀" code={directionalCodes.left} onDown={startButton} onUp={releaseButton} />
+                  <span className="hardest-pad-center" aria-hidden="true" />
+                  <TouchKey label="Derecha" text="▶" code={directionalCodes.right} onDown={startButton} onUp={releaseButton} />
+                </div>
               </div>
-              {activeGame.controls === "icecream" && (
-                <button
-                  className={`action-button${actionPressed ? " pressed" : ""}`}
-                  type="button"
-                  aria-label="Acción"
-                  onPointerDown={(event) => { setActionPressed(true); startButton(event, onlineStarted && playerSeat === 2 ? 70 : 32); }}
-                  onPointerUp={(event) => { setActionPressed(false); releaseButton(event, sendPlayerKey); }}
-                  onPointerCancel={(event) => { setActionPressed(false); releaseButton(event, sendPlayerKey); }}
-                >ACCIÓN</button>
-              )}
-            </div>
+            ) : (
+              <div className="landscape-controls" aria-label="Controles táctiles">
+                <div className="mobile-dpad" aria-label="Cruceta de movimiento">
+                  <span />
+                  <TouchKey label="Arriba" text="▲" code={directionalCodes.up} onDown={startButton} onUp={releaseButton} />
+                  <span />
+                  <TouchKey label="Izquierda" text="◀" code={directionalCodes.left} onDown={startButton} onUp={releaseButton} />
+                  <span />
+                  <TouchKey label="Derecha" text="▶" code={directionalCodes.right} onDown={startButton} onUp={releaseButton} />
+                  <span />
+                  <TouchKey label="Abajo" text="▼" code={directionalCodes.down} onDown={startButton} onUp={releaseButton} />
+                  <span />
+                </div>
+                {activeGame.controls === "icecream" && (
+                  <button
+                    className={`action-button${actionPressed ? " pressed" : ""}`}
+                    type="button"
+                    aria-label="Acción"
+                    onPointerDown={(event) => { setActionPressed(true); startButton(event, onlineStarted && playerSeat === 2 ? 70 : 32); }}
+                    onPointerUp={(event) => { setActionPressed(false); releaseButton(event, sendPlayerKey); }}
+                    onPointerCancel={(event) => { setActionPressed(false); releaseButton(event, sendPlayerKey); }}
+                  >ACCIÓN</button>
+                )}
+              </div>
+            )
           )}
           {activeGame.title === "Bubble Trouble" && (
             <div className="touch-controls" aria-label="Controles táctiles">
@@ -692,9 +717,9 @@ function App() {
               </div>
             </div>
           )}
-          <div id="orientationNotice" role="status">
-            <span>{portraitGame ? "Gira el teléfono en vertical para jugar." : "Gira el teléfono en horizontal para jugar."}</span>
-          </div>
+          {activeGame.id === "worlds-hardest-game" && (
+            <div id="orientationNotice" role="status">Este juego solo está disponible en vertical. Gira el teléfono para continuar.</div>
+          )}
         </div>
       )}
 
