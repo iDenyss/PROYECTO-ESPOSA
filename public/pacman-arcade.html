@@ -7,7 +7,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-color: #050508;
+            --bg-color: #101a3c;
             --arcade-blue: #1919A6;
             --arcade-blue-glow: #3b3bff;
             --pacman-yellow: #FFFF00;
@@ -50,12 +50,12 @@
             height: 100%;
             min-height: 0;
             max-width: 560px;
-            background: #0b0b12;
-            border: 3px solid #22223b;
+            background: #17234c;
+            border: 3px solid #384b91;
             border-radius: 16px;
             padding: clamp(5px, 1.5vh, 14px);
             gap: 4px;
-            box-shadow: 0 0 35px rgba(25, 25, 166, 0.45), inset 0 0 15px rgba(0, 0, 0, 0.9);
+            box-shadow: 0 0 35px rgba(25, 25, 166, 0.45), inset 0 0 15px rgba(0, 0, 0, 0.45);
         }
 
         /* Marcador Superior */
@@ -111,7 +111,7 @@
             min-height: 0;
             width: min(100%, calc((100dvh - 220px) * 21 / 22));
             aspect-ratio: 21 / 22;
-            background-color: #0c1740;
+            background-color: #152a66;
             border: 2px solid var(--arcade-blue);
             border-radius: 8px;
             overflow: hidden;
@@ -140,7 +140,7 @@
         }
 
         #startScreen {
-            background: rgba(0, 0, 0, 0.48);
+            background: rgba(2, 8, 24, 0.22);
         }
 
         .overlay.hidden {
@@ -1465,7 +1465,7 @@
 
             render() {
                 const ctx = this.ctx;
-                ctx.fillStyle = '#0c1740';
+                ctx.fillStyle = '#152a66';
                 ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
                 this.drawMaze();
