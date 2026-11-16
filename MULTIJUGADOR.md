@@ -11,7 +11,7 @@ Netlify aloja la aplicación React compilada y los SWF de `GAMES/` como archivos
 5. Si Render asignó una URL diferente, configura en Netlify **Site configuration → Environment variables** con `ARCADE_MULTIPLAYER_SERVER` y esa URL HTTPS. Vuelve a desplegar Netlify.
 6. Despliega Netlify después de desplegar Render y abre la URL de Netlify en ambos iPhone. Un jugador crea la sala, comparte el código o la invitación y el otro se une.
 
-El catálogo incluye Bubble Trouble, Zombie Trailer Park y Bad Ice Cream. Bad Ice Cream tiene el botón **Jugar online** en su ficha y usa controles táctiles en horizontal: joystick (flechas para el anfitrión, WASD para el segundo jugador) y botón de acción (espacio para el anfitrión, F para el segundo jugador). Los controles de Bubble Trouble se colocan por encima de la insignia flotante de Netlify en móviles.
+El catálogo incluye Bubble Trouble, Zombie Trailer Park, Bad Ice Cream, Age of War, Bloons Tower Defense 4, The World's Hardest Game y Pac-Man. Pac-Man se puede jugar individualmente desde su ficha o en multijugador desde **Jugar online**; ambos jugadores comparten el laberinto, compiten por los puntos y evitan a los fantasmas. Bad Ice Cream tiene el botón **Jugar online** en su ficha y usa controles táctiles en horizontal: cruceta (flechas para el anfitrión, WASD para el segundo jugador) y botón de acción (espacio para el anfitrión, F para el segundo jugador). The World's Hardest Game se juega en vertical, con la pantalla arriba y la cruceta centrada debajo; Age of War y Bloons Tower Defense 4 se adaptan al modo horizontal y aceptan toques sobre el juego. Los controles de Bubble Trouble se colocan por encima de la insignia flotante de Netlify en móviles.
 
 La URL predeterminada de Render se inserta en `config.js` durante la compilación de Netlify. Si cambias de URL de Netlify, actualiza `ALLOWED_ORIGINS` en Render; si cambia la URL de Render, configura `ARCADE_MULTIPLAYER_SERVER` en Netlify y vuelve a desplegar.
 
@@ -26,7 +26,7 @@ Para desarrollo local, ejecuta `npm install`, inicia `npm start` en una terminal
 
 ## Crear una partida
 
-Para Bad Ice Cream, en un teléfono toca **Jugar online** en la ficha del juego y luego **Crear sala**. Comparte el código con el segundo teléfono, que puede abrir el mismo juego y unirse escribiendo el código. La sala informa qué juego eligió el anfitrión. Cuando los dos aparezcan conectados, el jugador 1 inicia la partida. El anfitrión ejecuta el SWF y transmite el video del juego; el segundo teléfono ve esa misma partida y sus botones envían los controles del jugador 2 al anfitrión. Así ambos ven el mismo movimiento y los mismos reinicios.
+Para Pac-Man o Bad Ice Cream, toca **Jugar online** en la ficha y luego **Crear sala**. Comparte el código con el segundo jugador, que puede unirse escribiéndolo. Cuando los dos aparezcan conectados, el jugador 1 inicia la partida. En Pac-Man ambos juegan en el mismo laberinto; usa las flechas o WASD en computadora, o los controles táctiles en móvil. Para Bad Ice Cream, el anfitrión ejecuta el SWF y transmite el video del juego; el segundo teléfono ve esa misma partida y sus botones envían los controles del jugador 2 al anfitrión.
 
 Bubble Trouble también se puede iniciar desde **Multijugador**. Su mapeo existente se conserva: el anfitrión usa flechas izquierda/derecha y espacio; el segundo jugador usa X/W/C.
 

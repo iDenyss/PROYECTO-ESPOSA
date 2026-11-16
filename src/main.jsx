@@ -1,14 +1,21 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import PacmanGame from "./PacmanGame";
 import "./styles.css";
 
 const INITIAL_CATALOGS = [
   { id: "accion", name: "Acción", games: [
-    { id: "bubble-trouble", title: "Bubble Trouble", swf: "GAMES/bubbletrouble.swf", icon: "🫧", orientation: "portrait" },
-    { id: "bad-ice-cream-1", title: "Bad Ice Cream", swf: "GAMES/Bad_Ice_Cream.swf", icon: "🍦", orientation: "landscape", controls: "icecream" }
+    { id: "bubble-trouble", title: "Bubble Trouble", swf: "GAMES/bubbletrouble.swf", icon: "🫧", thumb: "/images/bubble-trouble.jpg", orientation: "portrait" },
+    { id: "bad-ice-cream-1", title: "Bad Ice Cream", swf: "GAMES/Bad_Ice_Cream.swf", icon: "🍦", thumb: "/images/bad-ice-cream.jpg", orientation: "landscape", controls: "icecream" },
+    { id: "age-of-war", title: "Age of War", swf: "GAMES/age_of_war.swf", icon: "⚔️", thumb: "/images/age-of-war.jpg", orientation: "landscape" }
   ]},
   { id: "estrategia", name: "Estrategia", games: [
-    { id: "zombie-trailer-park", title: "Zombie Trailer Park", swf: "GAMES/zombie-trailer-park.swf", icon: "🧟", orientation: "landscape" }
+    { id: "zombie-trailer-park", title: "Zombie Trailer Park", swf: "GAMES/zombie-trailer-park.swf", icon: "🧟", thumb: "/images/zombie.jpg", orientation: "landscape" },
+    { id: "bloons-tower-defence-4", title: "Bloons Tower Defense 4", swf: "GAMES/bloons-tower-defence-4.swf", icon: "🎈", thumb: "/images/bloons-tower.jpg", orientation: "landscape" }
+  ]},
+  { id: "arcade", name: "Arcade", games: [
+    { id: "pacman-multiplayer", title: "Pac-Man", icon: "🟡", thumb: "/images/pacman.jpg", multiplayerOnly: true, soloPlayable: true },
+    { id: "worlds-hardest-game", title: "The World's Hardest Game", swf: "GAMES/the-world's-hardest-game.swf", icon: "🟥", thumb: "/images/hard-game.jpg", orientation: "portrait", controls: "dpad" }
   ]}
 ];
 
@@ -26,47 +33,12 @@ const KEY_INFO = {
   87: ["w", "KeyW"],
   88: ["x", "KeyX"]
 };
-const DB_NAME = "arcade-swf";
-const STORE = "files";
-
-function openDB() {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 1);
-    request.onupgradeneeded = () => request.result.createObjectStore(STORE, { keyPath: "id", autoIncrement: true });
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-async function libraryAll() {
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const request = db.transaction(STORE).objectStore(STORE).getAll();
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-async function libraryAdd(name, blob) {
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORE, "readwrite");
-    transaction.objectStore(STORE).add({ name, blob, added: Date.now() });
-    transaction.oncomplete = resolve;
-    transaction.onerror = () => reject(transaction.error);
-  });
-}
-
-async function libraryDelete(id) {
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORE, "readwrite");
-    transaction.objectStore(STORE).delete(id);
-    transaction.oncomplete = resolve;
-    transaction.onerror = () => reject(transaction.error);
-  });
-}
-
+const CATEGORY_ICONS = {
+  todos: "🎮",
+  accion: "🔥",
+  estrategia: "🧠",
+  arcade: "🕹️"
+};
 function hue(text) {
   let value = 0;
   for (let index = 0; index < text.length; index += 1) value = (value * 31 + text.charCodeAt(index)) % 360;
@@ -81,8 +53,9 @@ function gradient(title) {
 function App() {
   const [catalogs, setCatalogs] = useState(INITIAL_CATALOGS);
   const [category, setCategory] = useState("todos");
+  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 760);
+  const [logoOpen, setLogoOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [library, setLibrary] = useState([]);
   const [activeGame, setActiveGame] = useState(null);
   const [reloadId, setReloadId] = useState(0);
   const [toastMessage, setToastMessage] = useState("");
@@ -93,6 +66,7 @@ function App() {
   const [roomInput, setRoomInput] = useState("");
   const [roomReady, setRoomReady] = useState(false);
   const [playerSeat, setPlayerSeat] = useState(null);
+  const [pacmanState, setPacmanState] = useState(null);
   const [onlineStarted, setOnlineStarted] = useState(false);
   const [remoteView, setRemoteView] = useState(false);
   const [hideBar, setHideBar] = useState(false);
@@ -108,10 +82,19 @@ function App() {
   const activeGameRef = useRef(null);
   const stateRef = useRef({});
   const toastTimerRef = useRef(null);
-  const joystickCodesRef = useRef(new Set());
-  const joystickRef = useRef(null);
-  const [joystickPosition, setJoystickPosition] = useState({ x: 0, y: 0 });
   const [actionPressed, setActionPressed] = useState(false);
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 760px)");
+    const updateSidebar = () => setSidebarOpen(!media.matches);
+    updateSidebar();
+    if (media.addEventListener) media.addEventListener("change", updateSidebar);
+    else media.addListener(updateSidebar);
+    return () => {
+      if (media.removeEventListener) media.removeEventListener("change", updateSidebar);
+      else media.removeListener(updateSidebar);
+    };
+  }, []);
 
   activeGameRef.current = activeGame;
   stateRef.current = {
@@ -157,16 +140,6 @@ function App() {
     }
     dispatchKey(keyCode, down, localKeysRef.current);
   }, [dispatchKey]);
-
-  const setKeyCodes = useCallback((nextCodes) => {
-    for (const code of joystickCodesRef.current) {
-      if (!nextCodes.has(code)) sendPlayerKey(code, false);
-    }
-    for (const code of nextCodes) {
-      if (!joystickCodesRef.current.has(code)) sendPlayerKey(code, true);
-    }
-    joystickCodesRef.current = new Set(nextCodes);
-  }, [sendPlayerKey]);
 
   const showPeerError = useCallback((message) => {
     showToast(message);
@@ -247,6 +220,7 @@ function App() {
           showToast("El otro jugador se desconectó.");
         }
       }
+      if (message.type === "pacman-state") setPacmanState(message.state);
       if (message.type === "input" && seat === 1) dispatchKey(message.keyCode, message.down, remoteKeysRef.current);
       if (message.type === "signal") handlePeerSignal(message.signal).catch(() => showPeerError("No se pudo conectar la transmisión entre los teléfonos."));
       if (message.type === "media-error" && seat === 2) showPeerError("El anfitrión no pudo compartir la pantalla en este dispositivo.");
@@ -255,12 +229,12 @@ function App() {
         const game = INITIAL_CATALOGS.flatMap((catalog) => catalog.games).find((item) => item.id === gameId);
         if (!game) { setLobbyStatus("El servidor indicó un juego no disponible."); return; }
         setOnlineStarted(true);
-        setRemoteView(seat === 2);
+        setRemoteView(!game.multiplayerOnly && seat === 2);
         setLobbyOpen(false);
         setHideBar(false);
         setActiveGame(game);
         setLobbyGame(game);
-        if (seat === 2) {
+        if (seat === 2 && !game.multiplayerOnly) {
           try { createPeerConnection(); }
           catch (error) { showPeerError(error.message); }
         }
@@ -295,6 +269,7 @@ function App() {
     setRoomReady(false);
     setOnlineStarted(false);
     setRemoteView(false);
+    setPacmanState(null);
   }, [dispatchKey]);
 
   const closeGame = useCallback(() => {
@@ -315,6 +290,22 @@ function App() {
     document.body.classList.add("locked");
   }, [leaveMultiplayer]);
 
+  useEffect(() => {
+    if (!logoOpen) return undefined;
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") setLogoOpen(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [logoOpen]);
+
+  const sendPacmanDirection = useCallback((direction) => {
+    const socket = socketRef.current;
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ type: "pacman-input", direction }));
+    }
+  }, []);
+
   const openLobby = (game = INITIAL_CATALOGS[0].games[0]) => {
     setLobbyGame(game);
     setLobbyStatus("Crea una sala o ingresa el código de tu amigo.");
@@ -324,7 +315,7 @@ function App() {
   useEffect(() => {
     let active = true;
     let player;
-    if (!activeGame || remoteView) return undefined;
+    if (!activeGame || remoteView || activeGame.multiplayerOnly) return undefined;
     const mount = async () => {
       if (!window.RufflePlayer || !stageRef.current) {
         showToast("Ruffle no se pudo cargar. Revisa tu conexión.");
@@ -349,12 +340,7 @@ function App() {
         warnOnUnsupportedContent: false
       };
       try {
-        if (activeGame.blob) {
-          const data = new Uint8Array(await activeGame.blob.arrayBuffer());
-          await player.load({ data, ...options });
-        } else {
-          await player.load({ url: activeGame.swf, ...options });
-        }
+        await player.load({ url: activeGame.swf, ...options });
       } catch {
         showToast("No se pudo abrir este juego.");
         return;
@@ -407,10 +393,22 @@ function App() {
   }, [activeGame]);
 
   useEffect(() => {
-    libraryAll().then(setLibrary).catch(() => showToast("No se pudo leer Mi biblioteca en este navegador."));
     fetch("catalogo.json", { cache: "no-cache" })
       .then((response) => response.ok ? response.json() : [])
-      .then((data) => { if (Array.isArray(data) && data.length) setCatalogs(data); })
+      .then((data) => {
+        if (!Array.isArray(data) || !data.length) return;
+        const includesPacman = data.some((catalog) => Array.isArray(catalog.games) && catalog.games.some((game) => game.id === "pacman-multiplayer"));
+        if (includesPacman) {
+          setCatalogs(data);
+          return;
+        }
+        const arcadeCatalog = data.find((catalog) => catalog.id === "arcade");
+        setCatalogs(arcadeCatalog
+          ? data.map((catalog) => catalog.id === "arcade"
+            ? { ...catalog, games: [...(Array.isArray(catalog.games) ? catalog.games : []), INITIAL_CATALOGS[2].games[0]] }
+            : catalog)
+          : [...data, INITIAL_CATALOGS[2]]);
+      })
       .catch(() => {});
     const inviteCode = new URLSearchParams(location.search).get("room");
     if (inviteCode) {
@@ -431,8 +429,8 @@ function App() {
 
   useEffect(() => {
     const onBlur = () => {
-      stopJoystick();
       for (const code of [...localKeysRef.current]) sendPlayerKey(code, false);
+      setActionPressed(false);
     };
     window.addEventListener("blur", onBlur);
     return () => window.removeEventListener("blur", onBlur);
@@ -499,37 +497,16 @@ function App() {
 
   const reloadGame = () => setReloadId((value) => value + 1);
 
-  const handleFiles = async (event) => {
-    const files = [...event.target.files];
-    const valid = files.filter((file) => /\.swf$/i.test(file.name));
-    try {
-      for (const file of valid) await libraryAdd(file.name, file);
-      setLibrary(await libraryAll());
-      setCategory("mi");
-      if (valid.length) showToast(valid.length === 1 ? "Juego agregado a Mi biblioteca" : `${valid.length} juegos agregados a Mi biblioteca`);
-      else if (files.length) showToast("Solo se pueden agregar archivos .swf");
-    } catch {
-      showToast("No se pudieron guardar los juegos en este navegador.");
-    }
-    event.target.value = "";
-  };
-
-  const deleteLibraryGame = async (id) => {
-    try { await libraryDelete(id); setLibrary(await libraryAll()); }
-    catch { showToast("No se pudo quitar el juego de Mi biblioteca."); }
-  };
-
-  const allGames = useMemo(() => catalogs.flatMap((catalog) => catalog.games), [catalogs]);
   const normalizedSearch = search.trim().toLowerCase();
   const matches = (game) => !normalizedSearch || game.title.toLowerCase().includes(normalizedSearch);
-  const visibleCatalogs = category === "mi" ? [] : catalogs
+  const visibleCatalogs = catalogs
     .filter((catalog) => category === "todos" || category === catalog.id)
     .map((catalog) => ({ ...catalog, games: catalog.games.filter(matches) }))
     .filter((catalog) => catalog.games.length);
-  const libraryGames = library.filter((file) => matches({ title: file.name.replace(/\.swf$/i, "") }));
-  const visibleCount = visibleCatalogs.reduce((count, catalog) => count + catalog.games.length, 0) + (category === "todos" || category === "mi" ? libraryGames.length : 0);
+  const visibleCount = visibleCatalogs.reduce((count, catalog) => count + catalog.games.length, 0);
   const portraitGame = activeGame?.orientation === "portrait" || activeGame?.title === "Bubble Trouble";
-  const landscapeGame = activeGame?.orientation === "landscape" && activeGame?.controls === "icecream";
+  const landscapeGame = activeGame?.orientation === "landscape";
+  const portraitDpadGame = portraitGame && activeGame?.controls === "dpad";
 
   const releaseButton = (event) => {
     const pointerKeys = event.currentTarget.__pointerKeys;
@@ -551,92 +528,93 @@ function App() {
     sendPlayerKey(code, true);
   };
 
-  const stopJoystick = () => {
-    setKeyCodes(new Set());
-    setJoystickPosition({ x: 0, y: 0 });
-  };
-
-  const moveJoystick = (event) => {
-    const pad = joystickRef.current;
-    if (!pad) return;
-    const rect = pad.getBoundingClientRect();
-    const radius = rect.width / 2;
-    const dx = event.clientX - (rect.left + radius);
-    const dy = event.clientY - (rect.top + radius);
-    const distance = Math.hypot(dx, dy);
-    const scale = distance > radius * .62 ? radius * .62 / distance : 1;
-    const x = dx * scale;
-    const y = dy * scale;
-    setJoystickPosition({ x, y });
-    const threshold = radius * .28;
-    const playerTwo = onlineStarted && playerSeat === 2;
-    const nextCodes = new Set();
-    if (Math.abs(dx) > threshold) nextCodes.add(dx < 0 ? (playerTwo ? 65 : 37) : (playerTwo ? 68 : 39));
-    if (Math.abs(dy) > threshold) nextCodes.add(dy < 0 ? (playerTwo ? 87 : 38) : (playerTwo ? 83 : 40));
-    setKeyCodes(nextCodes);
-  };
-
-  const beginJoystick = (event) => {
-    event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    moveJoystick(event);
-  };
-
-  const categories = [{ id: "todos", name: "Todos" }, ...catalogs, { id: "mi", name: "Mi biblioteca" }];
+  const categories = [{ id: "todos", name: "Todos" }, ...catalogs];
+  const directionalCodes = onlineStarted && playerSeat === 2
+    ? { up: 87, left: 65, down: 83, right: 68 }
+    : { up: 38, left: 37, down: 40, right: 39 };
 
   return (
-    <>
+    <div className="site-shell">
       <header>
         <div className="brand">
-          <div className="logo" aria-hidden="true">🕹️</div>
-          <h1>Arcade SWF</h1>
-          <button className="add-btn" type="button" onClick={() => document.getElementById("fileInput").click()}>Agregar SWF</button>
+          <button
+            className="menu-toggle"
+            type="button"
+            aria-label={sidebarOpen ? "Ocultar categorías" : "Mostrar categorías"}
+            aria-expanded={sidebarOpen}
+            aria-controls="game-categories"
+            onClick={() => setSidebarOpen((open) => !open)}
+          >
+            <span className="menu-toggle-icon" aria-hidden="true"><span /><span /><span /></span>
+          </button>
+          <button className="logo-button" type="button" aria-label="Ampliar logo de Daniela Games" onClick={() => setLogoOpen(true)}>
+            <img className="logo" src="/images/logo-circular.png" alt="" />
+          </button>
+          <h1>Daniela Games</h1>
         </div>
-        <input className="search" type="search" placeholder="Buscar juego" aria-label="Buscar juego" autoComplete="off" value={search} onChange={(event) => setSearch(event.target.value)} />
-        <nav className="chips" aria-label="Catálogos">
-          {categories.map((item) => (
-            <button key={item.id} className="chip" type="button" aria-pressed={category === item.id} onClick={() => { setCategory(item.id); window.scrollTo({ top: 0 }); }}>{item.name}</button>
-          ))}
-        </nav>
+        <label className="search-wrap">
+          <span className="search-icon" aria-hidden="true" />
+          <input className="search" type="search" placeholder="Buscar juego" aria-label="Buscar juego" autoComplete="off" value={search} onChange={(event) => setSearch(event.target.value)} />
+        </label>
       </header>
 
-      <main>
-        {visibleCatalogs.map((catalog) => (
-          <section key={catalog.id}>
-            <div className="sec-head"><h2>{catalog.name}</h2><span>{catalog.games.length} {catalog.games.length === 1 ? "juego" : "juegos"}</span></div>
-            <div className="grid">
-              {catalog.games.map((game) => <GameTile key={game.swf} game={game} subtitle={catalog.name} onPlay={openGame} onMultiplayer={game.controls === "icecream" || game.id === "bubble-trouble" || game.title === "Bubble Trouble" ? openLobby : undefined} />)}
-            </div>
-          </section>
-        ))}
-        {(category === "todos" || category === "mi") && (
-          <section>
-            <div className="sec-head"><h2>Mi biblioteca</h2><span>{libraryGames.length} {libraryGames.length === 1 ? "juego" : "juegos"}</span></div>
-            {libraryGames.length ? (
-              <div className="grid">
-                {libraryGames.map((file) => {
-                  const game = { title: file.name.replace(/\.swf$/i, ""), icon: "📁", blob: file.blob };
-                  return <GameTile key={file.id} game={game} subtitle="En este dispositivo" onPlay={openGame} onDelete={() => deleteLibraryGame(file.id)} />;
-                })}
-              </div>
-            ) : (
-              <div className="empty">
-                Aquí van los archivos .swf que agregues desde tu iPhone. Se guardan solo en este dispositivo.
-                <br /><button type="button" onClick={() => document.getElementById("fileInput").click()}>Agregar SWF</button>
-              </div>
-            )}
-          </section>
-        )}
-        {visibleCount === 0 && category !== "mi" && <div className="empty">{normalizedSearch ? `No hay juegos que coincidan con “${search}”.` : "Este catálogo todavía no tiene juegos."}</div>}
-      </main>
+      {logoOpen && (
+        <div className="logo-preview" role="dialog" aria-modal="true" aria-label="Logo Daniela Games" onClick={(event) => {
+          if (event.target === event.currentTarget) setLogoOpen(false);
+        }}>
+          <button className="logo-preview-close" type="button" aria-label="Cerrar logo" onClick={() => setLogoOpen(false)}>×</button>
+          <img src="/images/logo-circular.png" alt="Logo Daniela Games ampliado" />
+        </div>
+      )}
 
-      <input id="fileInput" type="file" accept=".swf,application/x-shockwave-flash,application/octet-stream" multiple hidden onChange={handleFiles} />
+      <div className="catalog-layout">
+        <button
+          className={`sidebar-backdrop${sidebarOpen ? " is-visible" : ""}`}
+          type="button"
+          aria-label="Cerrar categorías"
+          aria-hidden={!sidebarOpen}
+          tabIndex={sidebarOpen ? 0 : -1}
+          onClick={() => setSidebarOpen(false)}
+        />
+        <aside id="game-categories" className={`sidebar${sidebarOpen ? " is-open" : " is-closed"}`} aria-label="Categorías de juegos" aria-hidden={!sidebarOpen}>
+          <nav className="chips" aria-label="Categorías">
+            {categories.map((item) => (
+              <button
+                key={item.id}
+                className="chip"
+                type="button"
+                aria-pressed={category === item.id}
+                onClick={() => {
+                  setCategory(item.id);
+                  window.scrollTo({ top: 0 });
+                  if (window.innerWidth <= 760) setSidebarOpen(false);
+                }}
+              >
+                <span className="chip-icon" aria-hidden="true">{CATEGORY_ICONS[item.id] || "🎲"}</span>
+                <span>{item.name}</span>
+              </button>
+            ))}
+          </nav>
+        </aside>
+
+        <main>
+          {visibleCatalogs.map((catalog) => (
+            <section key={catalog.id}>
+              <div className="sec-head"><h2>{catalog.name}</h2><span>{catalog.games.length} {catalog.games.length === 1 ? "juego" : "juegos"}</span></div>
+              <div className="grid">
+                {catalog.games.map((game) => <GameTile key={game.id} game={game} subtitle={catalog.name} onPlay={game.multiplayerOnly && !game.soloPlayable ? () => openLobby(game) : openGame} onMultiplayer={game.multiplayerOnly || game.controls === "icecream" || game.id === "bubble-trouble" || game.title === "Bubble Trouble" ? openLobby : undefined} />)}
+              </div>
+            </section>
+          ))}
+          {visibleCount === 0 && <div className="empty">{normalizedSearch ? `No hay juegos que coincidan con “${search}”.` : "Este catálogo todavía no tiene juegos."}</div>}
+        </main>
+      </div>
 
       {lobbyOpen && (
         <div className="lobby" role="dialog" aria-modal="true" aria-labelledby="lobbyTitle">
           <div className="lobby-card">
             <h2 id="lobbyTitle">{lobbyGame.title} online</h2>
-            <p>El anfitrión ejecuta el juego y comparte la pantalla; el segundo jugador la ve y envía sus controles.</p>
+            <p>{lobbyGame.multiplayerOnly ? "Compite en tiempo real: coman puntos, eviten fantasmas y consigan la puntuación más alta." : "El anfitrión ejecuta el juego y comparte la pantalla; el segundo jugador la ve y envía sus controles."}</p>
             <p className="lobby-status" role="status">{lobbyStatus}</p>
             {roomCode ? <div className="room-code">{roomCode}</div> : (
               <input className="room-input" type="text" inputMode="text" maxLength={8} placeholder="Código de sala" aria-label="Código de sala" autoComplete="off" value={roomInput} onChange={(event) => setRoomInput(event.target.value.replace(/[^a-z0-9]/gi, "").toUpperCase())} />
@@ -661,6 +639,7 @@ function App() {
           remoteView ? "remote-view" : "",
           portraitGame ? "portrait-game" : "",
           landscapeGame ? "landscape-game" : "",
+          portraitDpadGame ? "portrait-dpad-game" : "",
           hideBar ? "hide-bar" : ""
         ].filter(Boolean).join(" ")} role="dialog" aria-modal="true" aria-label="Reproductor">
           <div className="bar">
@@ -674,32 +653,34 @@ function App() {
             }}>Pantalla completa</button>
           </div>
           <div id="stage" ref={stageRef} key={reloadId}>
+            {activeGame.id === "pacman-multiplayer" && <PacmanGame state={pacmanState} playerSeat={playerSeat} solo={!onlineStarted} onDirection={sendPacmanDirection} />}
             {remoteView && <video id="remoteScreen" ref={remoteVideoRef} autoPlay playsInline muted onPlaying={() => setLobbyStatus("")} onClick={(event) => event.currentTarget.play().catch(() => setLobbyStatus("Toca la pantalla para iniciar el video."))} />}
             {remoteView && lobbyStatus && <div className="stream-status" role="status">{lobbyStatus}</div>}
             {hideBar && <button id="reveal" type="button" aria-label="Mostrar barra" onClick={() => setHideBar(false)}>☰</button>}
           </div>
-          {activeGame.controls === "icecream" && (
-            <div className="landscape-controls" aria-label="Controles táctiles de Bad Ice Cream">
-              <div
-                ref={joystickRef}
-                className="joystick"
-                role="application"
-                aria-label="Joystick de movimiento"
-                onPointerDown={beginJoystick}
-                onPointerMove={(event) => { if (event.currentTarget.hasPointerCapture(event.pointerId)) moveJoystick(event); }}
-                onPointerUp={stopJoystick}
-                onPointerCancel={stopJoystick}
-              >
-                <div className="joystick-knob" style={{ left: `calc(50% + ${joystickPosition.x}px)`, top: `calc(50% + ${joystickPosition.y}px)` }} />
+          {(activeGame.controls === "icecream" || activeGame.controls === "dpad") && (
+            <div className="landscape-controls" aria-label="Controles táctiles">
+              <div className="mobile-dpad" aria-label="Cruceta de movimiento">
+                <span />
+                <TouchKey label="Arriba" text="▲" code={directionalCodes.up} onDown={startButton} onUp={releaseButton} />
+                <span />
+                <TouchKey label="Izquierda" text="◀" code={directionalCodes.left} onDown={startButton} onUp={releaseButton} />
+                <span />
+                <TouchKey label="Derecha" text="▶" code={directionalCodes.right} onDown={startButton} onUp={releaseButton} />
+                <span />
+                <TouchKey label="Abajo" text="▼" code={directionalCodes.down} onDown={startButton} onUp={releaseButton} />
+                <span />
               </div>
-              <button
-                className={`action-button${actionPressed ? " pressed" : ""}`}
-                type="button"
-                aria-label="Acción"
-                onPointerDown={(event) => { setActionPressed(true); startButton(event, onlineStarted && playerSeat === 2 ? 70 : 32); }}
-                onPointerUp={(event) => { setActionPressed(false); releaseButton(event, sendPlayerKey); }}
-                onPointerCancel={(event) => { setActionPressed(false); releaseButton(event, sendPlayerKey); }}
-              >ACCIÓN</button>
+              {activeGame.controls === "icecream" && (
+                <button
+                  className={`action-button${actionPressed ? " pressed" : ""}`}
+                  type="button"
+                  aria-label="Acción"
+                  onPointerDown={(event) => { setActionPressed(true); startButton(event, onlineStarted && playerSeat === 2 ? 70 : 32); }}
+                  onPointerUp={(event) => { setActionPressed(false); releaseButton(event, sendPlayerKey); }}
+                  onPointerCancel={(event) => { setActionPressed(false); releaseButton(event, sendPlayerKey); }}
+                >ACCIÓN</button>
+              )}
             </div>
           )}
           {activeGame.title === "Bubble Trouble" && (
@@ -718,7 +699,7 @@ function App() {
       )}
 
       {toastMessage && <div id="toast" role="status">{toastMessage}</div>}
-    </>
+    </div>
   );
 }
 
@@ -735,17 +716,16 @@ function TouchKey({ label, text = "", fire = false, code, onDown, onUp }) {
   );
 }
 
-function GameTile({ game, subtitle, onPlay, onDelete, onMultiplayer }) {
+function GameTile({ game, subtitle, onPlay, onMultiplayer }) {
   return (
     <div className="tile">
       <button className="play" type="button" aria-label={`Jugar ${game.title}`} onClick={() => onPlay(game)}>
-        <div className="art" style={{ backgroundImage: `${game.thumb ? `url('${game.thumb.replace(/'/g, "%27")}'),` : ""}${gradient(game.title)}` }}>
-          {game.thumb ? "" : (game.icon || "🎮")}
+        <div className="art" style={!game.thumb ? { backgroundImage: gradient(game.title) } : undefined}>
+          {game.thumb ? <img src={game.thumb} alt="" loading="lazy" /> : (game.icon || "🎮")}
         </div>
         <div className="meta"><b>{game.title}</b><small>{subtitle}</small></div>
       </button>
       {onMultiplayer && <button className="multiplayer-cta" type="button" onClick={() => onMultiplayer(game)}>Jugar online</button>}
-      {onDelete && <button className="del" type="button" aria-label={`Quitar ${game.title}`} onClick={onDelete}>×</button>}
     </div>
   );
 }

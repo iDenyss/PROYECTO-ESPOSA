@@ -23,15 +23,125 @@ const allowedKeys = {
     2: new Set([65, 68, 70, 83, 87])
   }
 };
-const gameIds = new Set(["bubble-trouble", "bad-ice-cream-1"]);
+const gameIds = new Set(["bubble-trouble", "bad-ice-cream-1", "pacman-multiplayer"]);
+const PACMAN_LAYOUT = require("./src/pacman-layout.json");
+const PACMAN_SPAWNS = {
+  1: { x: 1, y: 1, direction: "right" },
+  2: { x: PACMAN_LAYOUT[0].length - 2, y: PACMAN_LAYOUT.length - 2, direction: "left" }
+};
+const PACMAN_GHOST_SPAWNS = [{ x: 6, y: 6 }, { x: 6, y: 7 }];
+const PACMAN_DIRECTIONS = {
+  up: { x: 0, y: -1 },
+  down: { x: 0, y: 1 },
+  left: { x: -1, y: 0 },
+  right: { x: 1, y: 0 }
+};
 const staticFiles = new Map([
   ["/", ["index.html", "text/html; charset=utf-8"]],
   ["/index.html", ["index.html", "text/html; charset=utf-8"]],
   ["/config.js", ["config.js", "text/javascript; charset=utf-8"]],
   ["/GAMES/Bad_Ice_Cream.swf", ["GAMES/Bad_Ice_Cream.swf", "application/x-shockwave-flash"]],
+  ["/GAMES/age_of_war.swf", ["GAMES/age_of_war.swf", "application/x-shockwave-flash"]],
+  ["/GAMES/bloons-tower-defence-4.swf", ["GAMES/bloons-tower-defence-4.swf", "application/x-shockwave-flash"]],
   ["/GAMES/bubbletrouble.swf", ["GAMES/bubbletrouble.swf", "application/x-shockwave-flash"]],
+  ["/GAMES/the-world's-hardest-game.swf", ["GAMES/the-world's-hardest-game.swf", "application/x-shockwave-flash"]],
   ["/GAMES/zombie-trailer-park.swf", ["GAMES/zombie-trailer-park.swf", "application/x-shockwave-flash"]]
 ]);
+
+function createPacmanState() {
+  const pellets = {};
+  PACMAN_LAYOUT.forEach((row, y) => {
+    [...row].forEach((cell, x) => {
+      if (cell === "." || cell === "o") pellets[`${x},${y}`] = cell === "o" ? 5 : 1;
+    });
+  });
+  const players = {};
+  for (const seat of [1, 2]) {
+    players[seat] = { ...PACMAN_SPAWNS[seat], score: 0, lives: 3 };
+  }
+  return {
+    players,
+    ghosts: PACMAN_GHOST_SPAWNS.map((ghost) => ({ ...ghost })),
+    pellets,
+    remaining: Object.keys(pellets).length,
+    powerTicks: 0,
+    tick: 0,
+    gameOver: false,
+    winner: null
+  };
+}
+
+function isPacmanWall(x, y) {
+  return x < 0 || y < 0 || y >= PACMAN_LAYOUT.length
+    || x >= PACMAN_LAYOUT[y].length
+    || PACMAN_LAYOUT[y][x] === "#";
+}
+
+function movePacmanPlayers(state) {
+  for (const seat of [1, 2]) {
+    const player = state.players[seat];
+    if (player.lives <= 0) continue;
+    const direction = PACMAN_DIRECTIONS[player.direction];
+    const nextX = player.x + direction.x;
+    const nextY = player.y + direction.y;
+    if (isPacmanWall(nextX, nextY)) continue;
+    player.x = nextX;
+    player.y = nextY;
+    const pelletKey = `${nextX},${nextY}`;
+    const points = state.pellets[pelletKey];
+    if (points) {
+      delete state.pellets[pelletKey];
+      player.score += points;
+      if (points === 5) state.powerTicks = 35;
+    }
+  }
+  state.remaining = Object.keys(state.pellets).length;
+}
+
+function movePacmanGhosts(state) {
+  if (state.tick % 2) return;
+  for (const ghost of state.ghosts) {
+    const options = Object.values(PACMAN_DIRECTIONS)
+      .map((direction) => ({ x: ghost.x + direction.x, y: ghost.y + direction.y }))
+      .filter(({ x, y }) => !isPacmanWall(x, y));
+    if (options.length) Object.assign(ghost, options[Math.floor(Math.random() * options.length)]);
+  }
+}
+
+function checkPacmanCollisions(state) {
+  for (const ghost of state.ghosts) {
+    for (const seat of [1, 2]) {
+      const player = state.players[seat];
+      if (player.lives <= 0 || player.x !== ghost.x || player.y !== ghost.y) continue;
+      if (state.powerTicks > 0) {
+        player.score += 25;
+        const spawn = PACMAN_GHOST_SPAWNS[state.ghosts.indexOf(ghost) % PACMAN_GHOST_SPAWNS.length];
+        Object.assign(ghost, spawn);
+      } else {
+        player.lives -= 1;
+        Object.assign(player, PACMAN_SPAWNS[seat]);
+      }
+    }
+  }
+}
+
+function advancePacmanRoom(room) {
+  const state = room.pacman;
+  if (!room.started || !state || state.gameOver) return;
+  state.tick += 1;
+  if (state.powerTicks > 0) state.powerTicks -= 1;
+  movePacmanPlayers(state);
+  movePacmanGhosts(state);
+  checkPacmanCollisions(state);
+  const playersOut = [1, 2].every((seat) => state.players[seat].lives <= 0);
+  if (state.remaining === 0 || playersOut) {
+    state.gameOver = true;
+    state.winner = state.players[1].score === state.players[2].score
+      ? null
+      : state.players[1].score > state.players[2].score ? 1 : 2;
+  }
+  for (const seat of [1, 2]) send(room.players[seat]?.socket, { type: "pacman-state", state });
+}
 
 function reply(req, res, status, value) {
   const headers = {
@@ -240,6 +350,15 @@ webSockets.on("connection", (client, room, seat) => {
       });
       return;
     }
+    if (message.type === "pacman-input") {
+      if (!room.started || room.gameId !== "pacman-multiplayer" || !Object.hasOwn(PACMAN_DIRECTIONS, message.direction)) {
+        client.close(1008, "Invalid Pac-Man input");
+        return;
+      }
+      room.pacman.players[seat].direction = message.direction;
+      room.lastActive = now;
+      return;
+    }
     if (message.type === "signal") {
       if (!room.started || !validSignal(seat, message.signal)) {
         client.close(1008, "Invalid signal");
@@ -260,7 +379,11 @@ webSockets.on("connection", (client, room, seat) => {
       if (ready) {
         room.started = true;
         room.lastActive = now;
+        if (room.gameId === "pacman-multiplayer") room.pacman = createPacmanState();
         for (const number of [1, 2]) send(room.players[number].socket, { type: "start", gameId: room.gameId });
+        if (room.gameId === "pacman-multiplayer") {
+          for (const number of [1, 2]) send(room.players[number].socket, { type: "pacman-state", state: room.pacman });
+        }
       }
       return;
     }
@@ -273,6 +396,10 @@ webSockets.on("connection", (client, room, seat) => {
     broadcastStatus(room);
   });
 });
+
+setInterval(() => {
+  for (const room of rooms.values()) advancePacmanRoom(room);
+}, 200).unref();
 
 setInterval(() => {
   const cutoff = Date.now() - ROOM_TTL;

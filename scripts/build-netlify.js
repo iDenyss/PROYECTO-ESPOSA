@@ -20,8 +20,11 @@ if (!fs.existsSync(path.join(output, "index.html"))) {
 const gamesOutput = path.join(output, "GAMES");
 fs.mkdirSync(gamesOutput, { recursive: true });
 const gameFiles = [
+  "age_of_war.swf",
   "Bad_Ice_Cream.swf",
+  "bloons-tower-defence-4.swf",
   "bubbletrouble.swf",
+  "the-world's-hardest-game.swf",
   "zombie-trailer-park.swf"
 ];
 for (const file of gameFiles) {
