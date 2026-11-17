@@ -1,352 +1,406 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import PACMAN_LAYOUT from "./pacman-layout.json";
+import React, { useEffect, useRef, useState } from 'react';
+import './PacmanGame.css';
 
-const KEY_DIRECTIONS = {
-  ArrowUp: "up",
-  w: "up",
-  ArrowDown: "down",
-  s: "down",
-  ArrowLeft: "left",
-  a: "left",
-  ArrowRight: "right",
-  d: "right"
-};
-const DIRECTIONS = { up: -Math.PI / 2, right: 0, down: Math.PI / 2, left: Math.PI };
-const MOVEMENTS = {
-  up: { x: 0, y: -1 },
-  down: { x: 0, y: 1 },
-  left: { x: -1, y: 0 },
-  right: { x: 1, y: 0 }
-};
-const COLORS = ["#ffe23b", "#ff72b6"];
-const MOVE_ANIMATION_MS = 200;
 
-function createSoloState() {
-  const pellets = {};
-  PACMAN_LAYOUT.forEach((row, y) => {
-    [...row].forEach((cell, x) => {
-      if (cell === "." || cell === "o") pellets[`${x},${y}`] = cell === "o" ? 5 : 1;
-    });
-  });
-  return {
-    players: { 1: { x: 1, y: 1, direction: "right", score: 0, lives: 3 } },
-    ghosts: [{ x: 6, y: 6 }, { x: 6, y: 7 }],
-    pellets,
-    remaining: Object.keys(pellets).length,
-    powerTicks: 0,
-    tick: 0,
-    gameOver: false,
-    winner: null
-  };
-}
-
-function isWall(x, y) {
-  return !PACMAN_LAYOUT[y] || PACMAN_LAYOUT[y][x] === "#";
-}
-
-function advanceSoloState(state, direction) {
-  if (!state || state.gameOver) return state;
-  const player = { ...state.players[1], direction };
-  const ghosts = state.ghosts.map((ghost) => ({ ...ghost }));
-  const next = {
-    ...state,
-    players: { 1: player },
-    ghosts,
-    pellets: { ...state.pellets },
-    tick: state.tick + 1,
-    powerTicks: Math.max(0, state.powerTicks - 1)
-  };
-  const movement = MOVEMENTS[direction];
-  const nextX = player.x + movement.x;
-  const nextY = player.y + movement.y;
-  if (!isWall(nextX, nextY)) {
-    player.x = nextX;
-    player.y = nextY;
-    const pelletKey = `${nextX},${nextY}`;
-    const points = next.pellets[pelletKey];
-    if (points) {
-      delete next.pellets[pelletKey];
-      player.score += points;
-      if (points === 5) next.powerTicks = 35;
-    }
-  }
-  next.remaining = Object.keys(next.pellets).length;
-
-  if (next.tick % 2 === 0) {
-    for (const ghost of ghosts) {
-      const options = Object.values(MOVEMENTS)
-        .map((step) => ({ x: ghost.x + step.x, y: ghost.y + step.y }))
-        .filter((position) => !isWall(position.x, position.y));
-      if (options.length) Object.assign(ghost, options[Math.floor(Math.random() * options.length)]);
-    }
-  }
-
-  for (let index = 0; index < ghosts.length; index += 1) {
-    const ghost = ghosts[index];
-    if (player.lives <= 0 || player.x !== ghost.x || player.y !== ghost.y) continue;
-    if (next.powerTicks > 0) {
-      player.score += 25;
-      Object.assign(ghost, [{ x: 6, y: 6 }, { x: 6, y: 7 }][index]);
-    } else {
-      player.lives -= 1;
-      Object.assign(player, { x: 1, y: 1, direction: "right" });
-    }
-  }
-
-  if (next.remaining === 0 || player.lives <= 0) {
-    next.gameOver = true;
-    next.winner = next.remaining === 0 && player.lives > 0 ? 1 : null;
-  }
-  return next;
-}
-
-function interpolatePosition(previous, current, progress) {
-  if (!previous || Math.abs(current.x - previous.x) > 1 || Math.abs(current.y - previous.y) > 1) return current;
-  return {
-    ...current,
-    x: previous.x + (current.x - previous.x) * progress,
-    y: previous.y + (current.y - previous.y) * progress
-  };
-}
-
-function drawPacman(ctx, x, y, radius, color, direction, time) {
-  const angle = DIRECTIONS[direction] || 0;
-  const mouth = .1 + (Math.sin(time / 100) + 1) * .19;
-  const fill = ctx.createRadialGradient(
-    x - radius * .36, y - radius * .4, radius * .04,
-    x, y, radius * 1.08
-  );
-  fill.addColorStop(0, "#fff8a8");
-  fill.addColorStop(.3, color);
-  fill.addColorStop(1, "#f5a900");
-  ctx.save();
-  ctx.shadowColor = color;
-  ctx.shadowBlur = radius * .6;
-  ctx.fillStyle = fill;
-  ctx.beginPath();
-  ctx.moveTo(x, y);
-  ctx.arc(x, y, radius, angle + mouth, angle + Math.PI * 2 - mouth);
-  ctx.closePath();
-  ctx.fill();
-  ctx.shadowBlur = 0;
-  ctx.strokeStyle = "rgba(255,255,210,.8)";
-  ctx.lineWidth = Math.max(1, radius * .045);
-  ctx.stroke();
-  const eyeAngle = angle - .62;
-  const eyeX = x + Math.cos(eyeAngle) * radius * .48;
-  const eyeY = y + Math.sin(eyeAngle) * radius * .48;
-  ctx.fillStyle = "#fffef3";
-  ctx.beginPath();
-  ctx.arc(eyeX, eyeY, radius * .13, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = "#182044";
-  ctx.beginPath();
-  ctx.arc(eyeX + Math.cos(angle) * radius * .035, eyeY + Math.sin(angle) * radius * .035, radius * .065, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-}
-
-function drawGhost(ctx, x, y, radius, color, time, phase, frightened) {
-  const bob = Math.sin(time / 180 + phase) * radius * .08;
-  const top = y + bob;
-  const fill = ctx.createLinearGradient(x - radius, top - radius, x + radius, top + radius);
-  fill.addColorStop(0, "#fff2f5");
-  fill.addColorStop(.25, color);
-  fill.addColorStop(1, frightened ? "#3d75ff" : "#9c2c88");
-  ctx.save();
-  ctx.shadowColor = color;
-  ctx.shadowBlur = radius * .55;
-  ctx.fillStyle = fill;
-  ctx.beginPath();
-  ctx.moveTo(x - radius, top + radius * .78);
-  ctx.lineTo(x - radius, top);
-  ctx.arc(x, top, radius, Math.PI, 0);
-  ctx.lineTo(x + radius, top + radius * .78);
-  for (let scallop = 0; scallop < 4; scallop += 1) {
-    const startX = x + radius - scallop * radius * .5;
-    const endX = startX - radius * .5;
-    const wave = Math.sin(time / 125 + phase + scallop) * radius * .08;
-    ctx.quadraticCurveTo((startX + endX) / 2, top + radius * .58 + wave, endX, top + radius * .78);
-  }
-  ctx.closePath();
-  ctx.fill();
-  ctx.shadowBlur = 0;
-  ctx.strokeStyle = "rgba(255,255,255,.5)";
-  ctx.lineWidth = Math.max(1, radius * .055);
-  ctx.beginPath();
-  ctx.arc(x - radius * .03, top - radius * .04, radius * .77, Math.PI * 1.18, Math.PI * 1.83);
-  ctx.stroke();
-  const blinking = Math.sin(time / 1300 + phase) > .985;
-  const eyeHeight = radius * (blinking ? .05 : .25);
-  ctx.fillStyle = "#fff";
-  ctx.beginPath();
-  ctx.ellipse(x - radius * .3, top - radius * .08, radius * .2, eyeHeight, 0, 0, Math.PI * 2);
-  ctx.ellipse(x + radius * .3, top - radius * .08, radius * .2, eyeHeight, 0, 0, Math.PI * 2);
-  ctx.fill();
-  if (!frightened && !blinking) {
-    const look = Math.sin(time / 480 + phase) * radius * .035;
-    ctx.fillStyle = "#19264b";
-    ctx.beginPath();
-    ctx.arc(x - radius * .27 + look, top - radius * .06, radius * .085, 0, Math.PI * 2);
-    ctx.arc(x + radius * .33 + look, top - radius * .06, radius * .085, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.restore();
-}
-
-function drawBoard(canvas, state, previousState, progress, time) {
-  const width = canvas.clientWidth;
-  const height = canvas.clientHeight;
-  if (!width || !height) return;
-  const ratio = window.devicePixelRatio || 1;
-  const pixelWidth = Math.round(width * ratio);
-  const pixelHeight = Math.round(height * ratio);
-  if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
-    canvas.width = pixelWidth;
-    canvas.height = pixelHeight;
-  }
-  const ctx = canvas.getContext("2d");
-  ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-  ctx.clearRect(0, 0, width, height);
-
-  const columns = PACMAN_LAYOUT[0].length;
-  const rows = PACMAN_LAYOUT.length;
-  const tile = Math.min(width / columns, height / rows);
-  const offsetX = (width - columns * tile) / 2;
-  const offsetY = (height - rows * tile) / 2;
-  const center = (column, row) => ({
-    x: offsetX + (column + .5) * tile,
-    y: offsetY + (row + .5) * tile
-  });
-
-  ctx.fillStyle = "#06112c";
-  ctx.fillRect(offsetX, offsetY, columns * tile, rows * tile);
-
-  PACMAN_LAYOUT.forEach((line, row) => {
-    [...line].forEach((cell, column) => {
-      const { x, y } = center(column, row);
-      if (cell === "#") {
-        const inset = tile * .07;
-        ctx.fillStyle = "#123fba";
-        ctx.strokeStyle = "#237bff";
-        ctx.lineWidth = Math.max(1, tile * .055);
-        const wallX = offsetX + column * tile + inset;
-        const wallY = offsetY + row * tile + inset;
-        const wallSize = tile - inset * 2;
-        ctx.fillRect(wallX, wallY, wallSize, wallSize);
-        ctx.strokeRect(wallX, wallY, wallSize, wallSize);
-      } else {
-        const pellet = state?.pellets?.[`${column},${row}`];
-        if (pellet) {
-          ctx.fillStyle = "#ffe6a3";
-          ctx.beginPath();
-          const radius = pellet > 1 ? tile * .18 : tile * .075;
-          ctx.arc(x, y, radius, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      }
-    });
-  });
-
-  state?.ghosts?.forEach((ghost, index) => {
-    const position = interpolatePosition(previousState?.ghosts?.[index], ghost, progress);
-    const { x, y } = center(position.x, position.y);
-    const frightened = state.powerTicks > 0;
-    drawGhost(ctx, x, y, tile * .34, frightened ? "#57b8ff" : ["#fa4e70", "#ff9f3f", "#d06bff"][index % 3], time, index * 1.8, frightened);
-  });
-  Object.entries(state?.players || {}).forEach(([seat, player]) => {
-    const position = interpolatePosition(previousState?.players?.[seat], player, progress);
-    const { x, y } = center(position.x, position.y);
-    drawPacman(ctx, x, y, tile * .38, COLORS[Number(seat) - 1] || COLORS[0], player.direction, time);
-  });
-}
-
-export default function PacmanGame({ state, playerSeat, solo = false, onDirection }) {
+export default function PacmanGame() {
   const canvasRef = useRef(null);
-  const directionRef = useRef("right");
-  const [soloState, setSoloState] = useState(createSoloState);
-  const renderedState = solo ? soloState : state;
-  const seat = solo ? 1 : playerSeat;
-  const motionRef = useRef({ from: renderedState, to: renderedState, startedAt: 0 });
-  const opponentSeat = seat === 1 ? 2 : 1;
-  const player = renderedState?.players?.[seat];
-  const opponent = renderedState?.players?.[opponentSeat];
-  const setDirection = useCallback((direction) => {
-    if (solo) directionRef.current = direction;
-    else onDirection(direction);
-  }, [solo, onDirection]);
+  const [score, setScore] = useState(0);
+  const [highScore, setHighScore] = useState(Number(localStorage.getItem('pacman_coop_record') || 350));
+  const [level, setLevel] = useState(1);
+  const [isCoop, setIsCoop] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [gameOver, setGameOver] = useState(false);
+  const [soundOn, setSoundOn] = useState(true);
+  const [livesJ1, setLivesJ1] = useState(3);
+  const [livesJ2, setLivesJ2] = useState(3);
+
+  // Referencias mutables para el bucle del juego sin perder estados
+  const stateRef = useRef({
+    score: 0,
+    level: 1,
+    isCoop: false,
+    running: false,
+    soundOn: true,
+    frightTimer: 0,
+    animTick: 0,
+    players: [],
+    ghosts: [],
+    map: []
+  });
 
   useEffect(() => {
-    if (!solo) return undefined;
-    const interval = window.setInterval(() => {
-      setSoloState((current) => advanceSoloState(current, directionRef.current));
-    }, MOVE_ANIMATION_MS);
-    return () => window.clearInterval(interval);
-  }, [solo]);
-
-  useEffect(() => {
-    const motion = motionRef.current;
-    motion.from = motion.to || renderedState;
-    motion.to = renderedState;
-    motion.startedAt = performance.now();
-  }, [renderedState]);
+    stateRef.current.soundOn = soundOn;
+  }, [soundOn]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return undefined;
-    let frame;
-    let active = true;
-    const render = (now) => {
-      if (!active) return;
-      const motion = motionRef.current;
-      const progress = motion.startedAt
-        ? Math.min(1, (now - motion.startedAt) / MOVE_ANIMATION_MS)
-        : 1;
-      const easedProgress = progress * progress * (3 - 2 * progress);
-      drawBoard(canvas, motion.to, motion.from, easedProgress, now);
-      frame = requestAnimationFrame(render);
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const TILE = 24;
+    const COLS = 19;
+    const ROWS = 21;
+
+    const BASE_MAP = [
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      [1,3,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,3,1],
+      [1,0,1,1,0,1,1,1,0,1,0,1,1,1,0,1,1,0,1],
+      [1,0,1,1,0,1,1,1,0,1,0,1,1,1,0,1,1,0,1],
+      [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+      [1,0,1,1,0,1,0,1,1,1,1,1,0,1,0,1,1,0,1],
+      [1,0,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,0,1],
+      [1,1,1,1,0,1,1,1,2,1,2,1,1,1,0,1,1,1,1],
+      [2,2,2,1,0,1,2,2,2,2,2,2,2,1,0,1,2,2,2],
+      [1,1,1,1,0,1,2,1,1,4,1,1,2,1,0,1,1,1,1],
+      [2,2,2,2,0,2,2,1,2,2,2,1,2,2,0,2,2,2,2],
+      [1,1,1,1,0,1,2,1,1,1,1,1,2,1,0,1,1,1,1],
+      [2,2,2,1,0,1,2,2,2,2,2,2,2,1,0,1,2,2,2],
+      [1,1,1,1,0,1,2,1,1,1,1,1,2,1,0,1,1,1,1],
+      [1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1],
+      [1,0,1,1,0,1,1,1,0,1,0,1,1,1,0,1,1,0,1],
+      [1,3,0,1,0,0,0,0,0,2,0,0,0,0,0,1,0,3,1],
+      [1,1,0,1,0,1,0,1,1,1,1,1,0,1,0,1,0,1,1],
+      [1,0,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,0,1],
+      [1,0,1,1,1,1,1,1,0,1,0,1,1,1,1,1,1,0,1],
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+    ];
+
+    function beep(freq, duration, type = 'sine', vol = 0.05) {
+      if (!stateRef.current.soundOn) return;
+      try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + duration);
+      } catch (e) {}
+    }
+
+    function initGame(coop) {
+      stateRef.current.isCoop = coop;
+      stateRef.current.score = 0;
+      stateRef.current.level = 1;
+      setScore(0);
+      setLevel(1);
+
+      stateRef.current.map = BASE_MAP.map(row => [...row]);
+      
+      const p1 = {
+        id: 1, hasBow: false,
+        x: coop ? 8 * TILE + TILE / 2 : 9 * TILE + TILE / 2,
+        y: 16 * TILE + TILE / 2,
+        dir: { x: 0, y: 0 }, nextDir: { x: 0, y: 0 },
+        speed: 2.2, lives: 3, respawnTimer: 0
+      };
+
+      let ps = [p1];
+      if (coop) {
+        ps.push({
+          id: 2, hasBow: true,
+          x: 10 * TILE + TILE / 2, y: 16 * TILE + TILE / 2,
+          dir: { x: 0, y: 0 }, nextDir: { x: 0, y: 0 },
+          speed: 2.2, lives: 3, respawnTimer: 0
+        });
+      }
+      stateRef.current.players = ps;
+      setLivesJ1(3);
+      setLivesJ2(coop ? 3 : 0);
+
+      const gConfigs = [
+        { name: 'Blinky', color: '#ef4444', gx: 9, gy: 8 },
+        { name: 'Pinky',  color: '#f472b6', gx: 8, gy: 10 },
+        { name: 'Inky',   color: '#22d3ee', gx: 9, gy: 10 },
+        { name: 'Clyde',  color: '#fb923c', gx: 10, gy: 10 }
+      ];
+      stateRef.current.ghosts = gConfigs.map(g => ({
+        ...g,
+        x: g.gx * TILE + TILE / 2, y: g.gy * TILE + TILE / 2,
+        dir: { x: 0, y: -1 }, speed: 1.75, eaten: false
+      }));
+
+      stateRef.current.running = true;
+      setIsPlaying(true);
+      setGameOver(false);
+    }
+
+    // Controles de teclado
+    const handleKeyDown = (e) => {
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
+        e.preventDefault();
+      }
+      const p1 = stateRef.current.players[0];
+      const p2 = stateRef.current.players[1];
+
+      if (p1) {
+        if (e.code === 'ArrowUp' || (!stateRef.current.isCoop && e.code === 'KeyW')) p1.nextDir = { x: 0, y: -1 };
+        if (e.code === 'ArrowDown' || (!stateRef.current.isCoop && e.code === 'KeyS')) p1.nextDir = { x: 0, y: 1 };
+        if (e.code === 'ArrowLeft' || (!stateRef.current.isCoop && e.code === 'KeyA')) p1.nextDir = { x: -1, y: 0 };
+        if (e.code === 'ArrowRight' || (!stateRef.current.isCoop && e.code === 'KeyD')) p1.nextDir = { x: 1, y: 0 };
+      }
+
+      if (stateRef.current.isCoop && p2) {
+        if (e.code === 'KeyW') p2.nextDir = { x: 0, y: -1 };
+        if (e.code === 'KeyS') p2.nextDir = { x: 0, y: 1 };
+        if (e.code === 'KeyA') p2.nextDir = { x: -1, y: 0 };
+        if (e.code === 'KeyD') p2.nextDir = { x: 1, y: 0 };
+      }
     };
-    frame = requestAnimationFrame(render);
+    window.addEventListener('keydown', handleKeyDown);
+
+    let animId;
+    function gameLoop() {
+      const s = stateRef.current;
+      s.animTick++;
+
+      if (s.running) {
+        // Lógica de movimiento y colisiones
+        let pellets = 0;
+        for (let r = 0; r < ROWS; r++) {
+          for (let c = 0; c < COLS; c++) {
+            if (s.map[r][c] === 0 || s.map[r][c] === 3) pellets++;
+          }
+        }
+        if (pellets === 0) {
+          s.level++;
+          setLevel(s.level);
+          beep(660, 0.25, 'square');
+          s.map = BASE_MAP.map(row => [...row]);
+        }
+
+        s.players.forEach(p => {
+          if (p.lives <= 0) return;
+          if (p.respawnTimer > 0) { p.respawnTimer--; return; }
+
+          const cx = Math.floor(p.x / TILE) * TILE + TILE / 2;
+          const cy = Math.floor(p.y / TILE) * TILE + TILE / 2;
+          if (Math.abs(p.x - cx) < 4 && Math.abs(p.y - cy) < 4) {
+            const wallCheck = (nx, ny) => {
+              const m = TILE * 0.42;
+              const pts = [
+                { c: Math.floor((nx - m)/TILE), r: Math.floor((ny - m)/TILE) },
+                { c: Math.floor((nx + m)/TILE), r: Math.floor((ny - m)/TILE) },
+                { c: Math.floor((nx - m)/TILE), r: Math.floor((ny + m)/TILE) },
+                { c: Math.floor((nx + m)/TILE), r: Math.floor((ny + m)/TILE) }
+              ];
+              return !pts.some(pt => pt.r < 0 || pt.r >= ROWS || pt.c < 0 || pt.c >= COLS || s.map[pt.r][pt.c] === 1);
+            };
+            if (p.nextDir.x !== 0 || p.nextDir.y !== 0) {
+              const testX = cx + p.nextDir.x * 2.5;
+              const testY = cy + p.nextDir.y * 2.5;
+              if (wallCheck(testX, testY)) {
+                p.x = cx; p.y = cy; p.dir = { ...p.nextDir };
+              }
+            }
+          }
+
+          // Mover
+          const nx = p.x + p.dir.x * p.speed;
+          const ny = p.y + p.dir.y * p.speed;
+          const m = TILE * 0.42;
+          const pts = [
+            { c: Math.floor((nx - m)/TILE), r: Math.floor((ny - m)/TILE) },
+            { c: Math.floor((nx + m)/TILE), r: Math.floor((ny - m)/TILE) },
+            { c: Math.floor((nx - m)/TILE), r: Math.floor((ny + m)/TILE) },
+            { c: Math.floor((nx + m)/TILE), r: Math.floor((ny + m)/TILE) }
+          ];
+          const canStep = !pts.some(pt => pt.r < 0 || pt.r >= ROWS || pt.c < 0 || pt.c >= COLS || s.map[pt.r][pt.c] === 1);
+          if (canStep) { p.x = nx; p.y = ny; }
+
+          if (p.x < 0) p.x = canvas.width;
+          if (p.x > canvas.width) p.x = 0;
+
+          // Comer
+          const col = Math.floor(p.x / TILE);
+          const row = Math.floor(p.y / TILE);
+          if (row >= 0 && row < ROWS && col >= 0 && col < COLS) {
+            if (s.map[row][col] === 0) {
+              s.map[row][col] = 2;
+              s.score += 10;
+              setScore(s.score);
+              if (s.score > highScore) {
+                setHighScore(s.score);
+                localStorage.setItem('pacman_coop_record', s.score);
+              }
+              beep(440, 0.04, 'triangle', 0.02);
+            } else if (s.map[row][col] === 3) {
+              s.map[row][col] = 2;
+              s.score += 50;
+              setScore(s.score);
+              s.frightTimer = 320;
+              beep(780, 0.18, 'square');
+            }
+          }
+        });
+
+        if (s.frightTimer > 0) s.frightTimer--;
+
+        s.ghosts.forEach(g => {
+          const cx = Math.floor(g.x / TILE) * TILE + TILE / 2;
+          const cy = Math.floor(g.y / TILE) * TILE + TILE / 2;
+          if (Math.abs(g.x - cx) < 3 && Math.abs(g.y - cy) < 3) {
+            g.x = cx; g.y = cy;
+            const dirs = [{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}].filter(d => {
+              const tc = Math.floor((cx + d.x * TILE)/TILE);
+              const tr = Math.floor((cy + d.y * TILE)/TILE);
+              return tr >= 0 && tr < ROWS && tc >= 0 && tc < COLS && s.map[tr][tc] !== 1;
+            });
+            if (dirs.length > 0) {
+              g.dir = dirs[Math.floor(Math.random() * dirs.length)];
+            }
+          }
+          g.x += g.dir.x * g.speed;
+          g.y += g.dir.y * g.speed;
+
+          s.players.forEach(p => {
+            if (p.lives <= 0 || p.respawnTimer > 0) return;
+            if (Math.hypot(p.x - g.x, p.y - g.y) < TILE * 0.7) {
+              p.lives--;
+              if (p.id === 1) setLivesJ1(p.lives);
+              if (p.id === 2) setLivesJ2(p.lives);
+
+              p.x = (p.id === 1 ? 8 : 10) * TILE + TILE / 2;
+              p.y = 16 * TILE + TILE / 2;
+              p.dir = { x: 0, y: 0 };
+              p.nextDir = { x: 0, y: 0 };
+              p.respawnTimer = 90;
+              beep(160, 0.3, 'sawtooth');
+
+              if (s.players.every(pl => pl.lives <= 0)) {
+                s.running = false;
+                setIsPlaying(false);
+                setGameOver(true);
+              }
+            }
+          });
+        });
+      }
+
+      // Dibujar en Canvas
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          const val = s.map[r][c];
+          const x = c * TILE; const y = r * TILE;
+          if (val === 1) {
+            ctx.fillStyle = '#172554';
+            ctx.strokeStyle = '#3b82f6';
+            ctx.lineWidth = 1.5;
+            ctx.fillRect(x+2, y+2, TILE-4, TILE-4);
+            ctx.strokeRect(x+2, y+2, TILE-4, TILE-4);
+          } else if (val === 0) {
+            ctx.fillStyle = '#fde68a';
+            ctx.beginPath(); ctx.arc(x + TILE/2, y + TILE/2, 2.5, 0, Math.PI*2); ctx.fill();
+          } else if (val === 3) {
+            ctx.fillStyle = '#fb923c';
+            ctx.beginPath(); ctx.arc(x + TILE/2, y + TILE/2, 5, 0, Math.PI*2); ctx.fill();
+          }
+        }
+      }
+
+      // Dibujar jugadores
+      s.players.forEach(p => {
+        if (p.lives <= 0) return;
+        if (p.respawnTimer > 0 && Math.floor(p.respawnTimer / 8) % 2 === 0) return;
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.fillStyle = '#facc15';
+        ctx.beginPath(); ctx.arc(0, 0, TILE * 0.42, 0.2, Math.PI * 1.8); ctx.lineTo(0,0); ctx.fill();
+
+        // Moño rosa Ms. Pac-Man (J2 Cooperativo)
+        if (p.hasBow) {
+          ctx.fillStyle = '#ec4899';
+          ctx.beginPath(); ctx.arc(-5, -12, 4, 0, Math.PI * 2); ctx.arc(5, -12, 4, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#f43f5e';
+          ctx.beginPath(); ctx.arc(0, -12, 2.5, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.restore();
+      });
+
+      // Dibujar fantasmas
+      s.ghosts.forEach(g => {
+        ctx.save();
+        ctx.translate(g.x, g.y);
+        ctx.fillStyle = s.frightTimer > 0 ? '#2563eb' : g.color;
+        ctx.beginPath();
+        ctx.arc(0, -2, TILE * 0.42, Math.PI, 0);
+        ctx.lineTo(TILE * 0.42, TILE * 0.42);
+        ctx.lineTo(-TILE * 0.42, TILE * 0.42);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      });
+
+      animId = requestAnimationFrame(gameLoop);
+    }
+
+    animId = requestAnimationFrame(gameLoop);
+
     return () => {
-      active = false;
-      cancelAnimationFrame(frame);
+      window.removeEventListener('keydown', handleKeyDown);
+      cancelAnimationFrame(animId);
     };
   }, []);
 
-  useEffect(() => {
-    const handleKeyDown = (event) => {
-      const direction = KEY_DIRECTIONS[event.key];
-      if (!direction) return;
-      event.preventDefault();
-      setDirection(direction);
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [setDirection]);
-
   return (
-    <div className="pacman-game">
-      <div className="pacman-scorebar">
-        <div><span className="player-dot player-one" />Tú <b>{player?.score || 0}</b><small>♥ {player?.lives ?? 3}</small></div>
-        {!solo && <div><span className="player-dot player-two" />Rival <b>{opponent?.score || 0}</b><small>♥ {opponent?.lives ?? 3}</small></div>}
-        <div className="pacman-remaining">{solo ? "Individual" : `Puntos: ${renderedState?.remaining ?? "…"}`}</div>
-      </div>
-      <canvas className="pacman-canvas" ref={canvasRef} aria-label={solo ? "Laberinto individual de Pac-Man" : "Laberinto multijugador de Pac-Man"} />
-      {renderedState?.gameOver && (
-        <div className="pacman-result" role="status">
-          {solo ? (renderedState.winner ? "¡Ganaste!" : "Fin de la partida") : renderedState.winner === playerSeat ? "¡Ganaste!" : renderedState.winner ? "¡Ganó tu rival!" : "¡Empate!"}
+    <div className="pacman-cabinet">
+      <div className="pacman-hud-top">
+        <div className="stat">
+          <span className="stat-label">PUNTOS</span>
+          <span className="stat-val">{String(score).padStart(5, '0')}</span>
         </div>
-      )}
-      {!renderedState && <div className="pacman-waiting" role="status">Conectando la partida…</div>}
-      <div className="pacman-controls" aria-label="Controles táctiles">
-        <span />
-        <button type="button" aria-label="Arriba" onClick={() => setDirection("up")}>▲</button>
-        <span />
-        <button type="button" aria-label="Izquierda" onClick={() => setDirection("left")}>◀</button>
-        <button type="button" aria-label="Abajo" onClick={() => setDirection("down")}>▼</button>
-        <button type="button" aria-label="Derecha" onClick={() => setDirection("right")}>▶</button>
+        <div className="stat">
+          <span className="stat-label">RÉCORD</span>
+          <span className="stat-val">{String(highScore).padStart(5, '0')}</span>
+        </div>
+        <button className="btn-sound" onClick={() => setSoundOn(!soundOn)}>
+          {soundOn ? '🔊 SONIDO' : '🔇 MUDO'}
+        </button>
       </div>
-      <p className="pacman-help">Flechas o WASD para moverte. Come los puntos y evita a los fantasmas.</p>
+
+      <div className="pacman-board-container">
+        <canvas ref={canvasRef} width="456" height="504" className="pacman-canvas-real" />
+
+        {!isPlaying && (
+          <div className="pacman-overlay">
+            <h2 className="pacman-title">{gameOver ? 'GAME OVER' : 'PAC-MAN COOP'}</h2>
+            
+            <div className="mode-selector">
+              <button className={`mode-btn ${!isCoop ? 'active' : ''}`} onClick={() => setIsCoop(false)}>
+                1 JUGADOR<br/><span style={{fontSize:'7px'}}>CLÁSICO</span>
+              </button>
+              <button className={`mode-btn ${isCoop ? 'active' : ''}`} onClick={() => setIsCoop(true)}>
+                2 JUGADORES<br/><span style={{fontSize:'7px'}}>COOPERATIVO 🎀</span>
+              </button>
+            </div>
+
+            <button className="btn-start" onClick={() => {
+              const canvas = canvasRef.current;
+              // Reiniciar estado
+              window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space' }));
+            }}>
+              JUGAR PARTIDA
+            </button>
+
+            <p className="controls-hint">
+              {!isCoop ? 'Usa las FLECHAS del teclado' : 'J1: FLECHAS 🟡 | J2: W A SD 🎀'}
+            </p>
+          </div>
+        )}
+      </div>
+
+      <div className="pacman-hud-bottom">
+        <div className="lives-display">
+          <span>🟡 J1: {'❤️'.repeat(Math.max(0, livesJ1))}</span>
+          {isCoop && <span style={{marginLeft: '12px'}}>🎀 J2: {'❤️'.repeat(Math.max(0, livesJ2))}</span>}
+        </div>
+        <span className="level-badge">NIVEL {level}</span>
+      </div>
     </div>
   );
 }
