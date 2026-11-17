@@ -529,6 +529,7 @@ section { margin-bottom: 38px; animation: section-in 0.55s both; }
 }
 .bar .close { background: var(--accent); border-color: transparent; }
 
+/* REGLAS CLAVE PARA QUE EL PAC-MAN Y CUALQUIER JUEGO SE VEAN PERFECTOS Y CENTRADOS */
 #stage {
   flex: 1;
   min-height: 0;
@@ -538,10 +539,24 @@ section { margin-bottom: 38px; animation: section-in 0.55s both; }
   display: flex;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(circle at center, #0c132b 0%, #04060e 100%);
+  background: #000;
   padding-bottom: env(safe-area-inset-bottom, 0px);
   padding-left: env(safe-area-inset-left, 0px);
   padding-right: env(safe-area-inset-right, 0px);
+}
+
+#stage iframe,
+#stage canvas,
+#stage ruffle-player,
+#stage ruffle-embed,
+.pacman-arcade-frame {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 720px !important;
+  max-height: 85vh !important;
+  object-fit: contain !important;
+  margin: auto !important;
+  display: block !important;
 }
 
 @keyframes section-in {
