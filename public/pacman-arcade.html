@@ -214,7 +214,7 @@
     </div>
 
     <div class="board-wrap">
-      <canvas id="gameCanvas" width="456" height="504"></canvas>
+      <canvas id="gameCanvas" width="456" height="504" tabindex="0" aria-label="Tablero de Pac-Man"></canvas>
 
       <div class="overlay" id="overlay">
         <h2 class="game-title" id="overlayTitle">PAC-MAN COOP</h2>
@@ -401,11 +401,11 @@
       return false;
     }
 
-    function canMove(x, y, dir, isGhost = false) {
+    function canMove(x, y, dir, isGhost = false, distance = 2) {
       if (dir.x === 0 && dir.y === 0) return false;
       const margin = TILE * 0.4;
-      const nx = x + dir.x * 2;
-      const ny = y + dir.y * 2;
+      const nx = x + dir.x * distance;
+      const ny = y + dir.y * distance;
       const pts = [
         { c: Math.floor((nx - margin) / TILE), r: Math.floor((ny - margin) / TILE) },
         { c: Math.floor((nx + margin) / TILE), r: Math.floor((ny - margin) / TILE) },
@@ -442,7 +442,7 @@
 
         const cx = Math.floor(p.x / TILE) * TILE + TILE / 2;
         const cy = Math.floor(p.y / TILE) * TILE + TILE / 2;
-        if (Math.abs(p.x - cx) < 3 && Math.abs(p.y - cy) < 3) {
+        if (Math.abs(p.x - cx) < 0.5 && Math.abs(p.y - cy) < 0.5) {
           if (canMove(cx, cy, p.nextDir, false)) {
             p.x = cx; p.y = cy; p.dir = { ...p.nextDir };
           }
@@ -476,21 +476,20 @@
         const cy = Math.floor(g.y / TILE) * TILE + TILE / 2;
         const spd = frightTimer > 0 ? g.speed * 0.55 : g.speed;
 
-        if (Math.abs(g.x - cx) < 2.5 && Math.abs(g.y - cy) < 2.5) {
+        if (Math.abs(g.x - cx) < 0.5 && Math.abs(g.y - cy) < 0.5) {
           g.x = cx; g.y = cy;
-          const dirs = [{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}].filter(d => {
-            const tc = Math.floor((cx + d.x * TILE)/TILE);
-            const tr = Math.floor((cy + d.y * TILE)/TILE);
-            return tr >= 0 && tr < ROWS && tc >= 0 && tc < COLS && map[tr][tc] !== 1;
-          });
+          const dirs = [{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}]
+            .filter(d => canMove(cx, cy, d, true, TILE));
           if (dirs.length > 0) {
             g.dir = dirs[Math.floor(Math.random() * dirs.length)];
           } else {
             g.dir = { x: -g.dir.x, y: -g.dir.y };
           }
         }
-        g.x += g.dir.x * spd;
-        g.y += g.dir.y * spd;
+        if (canMove(g.x, g.y, g.dir, true, spd)) {
+          g.x += g.dir.x * spd;
+          g.y += g.dir.y * spd;
+        }
         if (g.x < 0) g.x = canvas.width;
         if (g.x > canvas.width) g.x = 0;
 
@@ -620,7 +619,7 @@
       document.getElementById('overlay').classList.add('hidden');
       document.getElementById('overlayTitle').textContent = 'PAC-MAN COOP';
       beep(520, 0.15, 'square');
-      document.getElementById('cabinetEl').focus();
+      document.getElementById('gameCanvas').focus();
     }
 
     document.getElementById('startBtn').addEventListener('click', startGame);

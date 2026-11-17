@@ -431,13 +431,28 @@ function App() {
 
   useEffect(() => {
     if (!activeGame) return undefined;
+    const isPacman = activeGame.id === "pacman-multiplayer";
+    const forwardPacmanKey = (event, down) => {
+      if (!isPacman || event.target === pacmanFrameRef.current) return;
+      if (event.target instanceof HTMLElement && event.target.closest("input, textarea, select, [contenteditable='true']")) return;
+      const keyCode = event.which || event.keyCode;
+      if (![32, 37, 38, 39, 40, 65, 68, 83, 87].includes(keyCode)) return;
+      if (down && event.repeat) return;
+      dispatchKey(keyCode, down, localKeysRef.current);
+    };
     const onKeyDown = (event) => {
       if (event.key === "Escape") closeGame();
       if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " "].includes(event.key)) event.preventDefault();
+      forwardPacmanKey(event, true);
     };
+    const onKeyUp = (event) => forwardPacmanKey(event, false);
     window.addEventListener("keydown", onKeyDown, true);
-    return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [activeGame, closeGame]);
+    window.addEventListener("keyup", onKeyUp, true);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown, true);
+      window.removeEventListener("keyup", onKeyUp, true);
+    };
+  }, [activeGame, closeGame, dispatchKey]);
 
   useEffect(() => {
     const onBlur = () => {
@@ -663,7 +678,7 @@ function App() {
             }}>Pantalla completa</button>
           </div>
           <div id="stage" ref={stageRef} key={reloadId}>
-            {activeGame.id === "pacman-multiplayer" && !remoteView && <iframe className="pacman-arcade-frame" ref={pacmanFrameRef} src="/pacman-arcade.html" title="Pac-Man clásico arcade" allow="autoplay" />}
+            {activeGame.id === "pacman-multiplayer" && !remoteView && <iframe className="pacman-arcade-frame" ref={pacmanFrameRef} src="/pacman-arcade.html" title="Pac-Man clásico arcade" allow="autoplay" tabIndex={0} />}
             {remoteView && <video id="remoteScreen" ref={remoteVideoRef} autoPlay playsInline muted onPlaying={() => setLobbyStatus("")} onClick={(event) => event.currentTarget.play().catch(() => setLobbyStatus("Toca la pantalla para iniciar el video."))} />}
             {remoteView && lobbyStatus && <div className="stream-status" role="status">{lobbyStatus}</div>}
             {hideBar && <button id="reveal" type="button" aria-label="Mostrar barra" onClick={() => setHideBar(false)}>☰</button>}
